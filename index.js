@@ -15,7 +15,7 @@ const app = express();
 app.use(cors());
 app.use(express.json());
 
-mongoose.connect('mongodb://localhost:27017/vinted');
+mongoose.connect(process.env.MONGODB_URI + '/vinted');
 
 const userRoutes = require('./routes/user.route');
 app.use('/user', userRoutes); // Ajoute automatiquement /user devant les routes importées depuis ./routes/user.js pour éviter de le saisir dans chaque route
