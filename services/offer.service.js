@@ -1,6 +1,7 @@
 const Offer = require('../models/Offer');
 const convertToBase64 = require('../utils/convertToBase64');
 const cloudinary = require('cloudinary').v2;
+const mongoose = require('mongoose');
 
 const publish = async data => {
     // Transforme mon image de Buffer à String
@@ -118,9 +119,12 @@ const remove = async data => {
         throw new Error('Offer does not exist');
     }
 
+    // 8 : accès non autorisé => middleware + test ci-dessous
     if (!data.user._id.equals(offerToRemove.owner._id)) {
         throw new Error('Unauthorized');
     }
+
+    // 9 : route protégée => middleware dans la route
 
     // Supprimer de la bdd
     await Offer.findByIdAndDelete(data.id);
@@ -192,9 +196,40 @@ const getAll = async data => {
 };
 
 const getOne = async data => {
+    // 1 : data et data.id absent
+    // 2 : data.id vide ou undefined ou null ou '' ou ' '
+    // Pas utile dans notre cas car le routing ne fera pas appel à cette route dans ce cas,
+    //  mais permet de rendre le service indépendant du routing (sauf pour une chaîne vide)
+    if (!data || !data.id || String(data.id).trim() === '') {
+        throw new Error('Offer id is mandatory');
+    }
+
+    // 3 : data.id au mauvais format
+    if (!mongoose.Types.ObjectId.isValid(data.id)) {
+        throw new Error('Invalid offer id');
+    }
+
     const offer = await Offer.findById(data.id);
 
-    return offer ? offer : {};
+    // 4 : data.id valide au format MongoDB mais utilisateur inexistant
+    if (!offer) {
+        throw new Error('Offer does not exist');
+    }
+
+    // 5 : data.id valide et utilisateur existant
+    // 6 : ne pas envoyer les champs sensibles
+    // 7 : le format est maîtrisé et géré par l'API
+    return {
+        _id: offer._id,
+        product_name: offer.product_name,
+        product_description: offer.product_description,
+        product_price: offer.product_price,
+        product_details: offer.product_details,
+        product_pictures: offer.product_pictures,
+        product_image: offer.product_image,
+        product_date: offer.product_date,
+        owner: offer.owner,
+    };
 };
 
 module.exports = { getAll, publish, update, remove, getOne };

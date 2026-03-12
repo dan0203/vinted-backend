@@ -39,6 +39,7 @@ const detailSchema = new Schema(
 
 const offerSchema = new Schema(
     {
+        _id: String,
         product_name: String,
         product_description: String,
         product_price: Number,

@@ -8,10 +8,10 @@ const isAuthenticated = require('../middlewares/isAuthenticated');
 // import de fileupload, package qui permet via un middleware de rendre les formdata lisibles à nos routes
 const fileUpload = require('express-fileupload');
 
-router.get('/', offerController.getAll);
 router.post('/publish', isAuthenticated, fileUpload(), offerController.publish);
+router.get('/', offerController.getAll);
+router.get('/:id', offerController.getOne);
 router.put('/:id', isAuthenticated, fileUpload(), offerController.update);
 router.delete('/:id', isAuthenticated, offerController.remove);
-router.get('/:id', offerController.getOne);
 
 module.exports = router;
