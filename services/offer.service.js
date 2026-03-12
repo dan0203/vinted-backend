@@ -201,24 +201,30 @@ const getOne = async data => {
     // Pas utile dans notre cas car le routing ne fera pas appel à cette route dans ce cas,
     //  mais permet de rendre le service indépendant du routing (sauf pour une chaîne vide)
     if (!data || !data.id || String(data.id).trim() === '') {
-        throw new Error('Offer id is mandatory');
+        const error = new Error('Offer id is mandatory');
+        error.statusCode = 400;
+        throw error;
     }
 
     // 3 : data.id au mauvais format
     if (!mongoose.Types.ObjectId.isValid(data.id)) {
-        throw new Error('Invalid offer id');
+        const error = new Error('Invalid offer id');
+        error.statusCode = 400;
+        throw error;
     }
 
     const offer = await Offer.findById(data.id);
 
-    // 4 : data.id valide au format MongoDB mais utilisateur inexistant
+    // 4 : data.id valide au format MongoDB mais offre inexistante
     if (!offer) {
-        throw new Error('Offer does not exist');
+        const error = new Error('Offer does not exist');
+        error.statusCode = 404;
+        throw error;
     }
 
-    // 5 : data.id valide et utilisateur existant
-    // 6 : ne pas envoyer les champs sensibles
-    // 7 : le format est maîtrisé et géré par l'API
+    // 5 : data.id valide et offre existante
+    // 6 : ne pas envoyer les champs sensibles (s'il y en a) ; ne renvoyer que les champs utiles
+    // 7 : les champs de l'objet renvoyé sont maîtrisés et gérés par l'API
     return {
         _id: offer._id,
         product_name: offer.product_name,

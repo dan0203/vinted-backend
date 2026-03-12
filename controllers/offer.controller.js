@@ -69,7 +69,7 @@ const getOne = async (req, res) => {
 
         return res.status(200).json(getOne);
     } catch (error) {
-        return res.status(500).json(error.message);
+        return res.status(error.statusCode || 500).json({ message: error.message });
     }
 };
 
