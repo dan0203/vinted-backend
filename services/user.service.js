@@ -81,7 +81,7 @@ const getOne = async data => {
         throw new Error('User does not exist');
     }
 
-    return user;
+    return { _id: user._id, account: { username: user.account.username, avatar: user.account.avatar }, newsletter: user.newsletter };
 };
 
 module.exports = { signup, login, getOne };
