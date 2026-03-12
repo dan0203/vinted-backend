@@ -44,4 +44,16 @@ const login = async (req, res) => {
     }
 };
 
-module.exports = { signup, login };
+const getOne = async (req, res) => {
+    try {
+        const data = req.params;
+
+        const user = await userService.getOne(data);
+
+        return res.status(200).json(user);
+    } catch (error) {
+        return res.status(500).json(error.message);
+    }
+};
+
+module.exports = { signup, login, getOne };

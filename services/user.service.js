@@ -56,9 +56,7 @@ const login = async data => {
     }
 
     // S'il existe, tester la crypto
-    const hashCalculated = SHA256(data.password + user.salt).toString(
-        encBase64,
-    );
+    const hashCalculated = SHA256(data.password + user.salt).toString(encBase64);
 
     // Si c'est KO, erreur
     if (hashCalculated !== user.hash) {
@@ -75,4 +73,15 @@ const login = async data => {
     };
 };
 
-module.exports = { signup, login };
+const getOne = async data => {
+    const user = await User.findOne({ _id: data.id });
+
+    // S'il n'existe pas, erreur
+    if (!user) {
+        throw new Error('User does not exist');
+    }
+
+    return user;
+};
+
+module.exports = { signup, login, getOne };
