@@ -187,7 +187,7 @@ const getAll = async data => {
     const sort = data.sort ? data.sort.replace('price-', '') : 'asc';
 
     // Récupération des offres correspondant aux filtres et à la page demandés
-    const offers = await Offer.find(filters).sort({ product_price: sort }).limit(nbOffersPerPage).skip(nbOffersToSkip);
+    const offers = await Offer.find(filters).populate('owner', '_id token account').sort({ product_price: sort }).limit(nbOffersPerPage).skip(nbOffersToSkip);
 
     // Nombre de documents correspondant aux filtres
     const count = await Offer.countDocuments(filters);
@@ -213,7 +213,7 @@ const getOne = async data => {
         throw error;
     }
 
-    const offer = await Offer.findById(data.id);
+    const offer = await Offer.findById(data.id).populate('owner', '_id token account');
 
     // 4 : data.id valide au format MongoDB mais offre inexistante
     if (!offer) {
@@ -225,6 +225,8 @@ const getOne = async data => {
     // 5 : data.id valide et offre existante
     // 6 : ne pas envoyer les champs sensibles (s'il y en a) ; ne renvoyer que les champs utiles
     // 7 : les champs de l'objet renvoyé sont maîtrisés et gérés par l'API
+    // 8 : accès non autorisé => inutile ici car toute publique
+    // 9 : route protégée => inutile ici car route publique
     return {
         _id: offer._id,
         product_name: offer.product_name,

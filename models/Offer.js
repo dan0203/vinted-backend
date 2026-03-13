@@ -51,16 +51,7 @@ const offerSchema = new Schema(
             type: [imageSchema],
             default: [],
         },
-        owner: {
-            account: {
-                username: String,
-                avatar: imageSchema,
-            },
-            _id: {
-                type: mongoose.Schema.Types.ObjectId,
-                ref: 'User',
-            },
-        },
+        owner: { type: Schema.Types.ObjectId, ref: 'User' },
         product_image: {
             type: imageSchema,
             default: null,
