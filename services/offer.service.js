@@ -5,42 +5,28 @@ const mongoose = require('mongoose');
 
 const publish = async data => {
     // Transforme mon image de Buffer à String
-    const base64Image = convertToBase64(data.files.picture);
+    // const base64Image = convertToBase64(data.files.picture);
 
     // Je fais une requête à cloudinary pour qu'il héberge mon image
     // const cloudinaryResponse = await cloudinary.uploader.upload(base64Image);
-    const cloudinaryResponse = await cloudinary.uploader.upload(base64Image, {
-        asset_folder: `/vinted/offers/`, // asset_folder: `/vinted/offers/${newOffer._id}`,
-    });
+    // const cloudinaryResponse = await cloudinary.uploader.upload(base64Image, {
+    //     asset_folder: `/vinted/offers/`, // asset_folder: `/vinted/offers/${newOffer._id}`,
+    // });
 
     const newOffer = new Offer({
-        product_name: data.body.title,
-        product_description: data.body.description,
-        product_price: data.body.price,
-        product_details: [
-            {
-                MARQUE: data.body.brand,
-            },
-            {
-                TAILLE: data.body.size,
-            },
-            {
-                ÉTAT: data.body.condition,
-            },
-            {
-                COULEUR: data.body.color,
-            },
-            {
-                EMPLACEMENT: data.body.city,
-            },
-        ],
-        product_image: cloudinaryResponse,
+        product_name: data.body.product_name,
+        product_description: data.body.product_description,
+        product_price: data.body.product_price,
+        product_details: data.body.product_details,
+        product_pictures: data.body.product_pictures,
+        // product_image: cloudinaryResponse,
+        product_image: data.body.product_image,
         owner: data.user._id,
     });
 
     await newOffer.save();
 
-    await newOffer.populate('owner', 'account email');
+    await newOffer.populate('owner', '_id token account');
 
     return newOffer;
 };
