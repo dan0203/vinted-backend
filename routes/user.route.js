@@ -1,7 +1,7 @@
-// Server
+// Modules npm
 const express = require('express');
 const router = express.Router();
-// Controllers
+// Modules internes
 const userController = require('../controllers/user.controller');
 
 router.post('/signup', userController.signup);
