@@ -24,16 +24,16 @@ const imageSchema = new Schema(
         folder: String,
         access_mode: String,
         original_filename: String,
-        api_key: String,
+        // api_key: String, // ne pas l'inclure dans la bdd pour des raisons de sécurité et de confidentialité
     },
     { _id: false },
 );
 
 const offerSchema = new Schema({
     _id: Schema.Types.ObjectId,
-    product_name: String,
-    product_description: String,
-    product_price: Number,
+    product_name: { type: String, required: true, trim: true },
+    product_description: { type: String, required: true, trim: true },
+    product_price: { type: Number, required: true, min: 0 },
     product_details: {
         // Chaque entrée est un objet libre du type { MARQUE: 'ZARA' }.
         type: [Schema.Types.Mixed],
@@ -43,7 +43,7 @@ const offerSchema = new Schema({
         type: [imageSchema],
         default: [],
     },
-    owner: { type: Schema.Types.ObjectId, ref: 'User' },
+    owner: { type: Schema.Types.ObjectId, ref: 'User', required: true },
     product_image: {
         type: imageSchema,
         default: null,
