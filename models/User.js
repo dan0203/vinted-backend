@@ -1,44 +1,17 @@
 const mongoose = require('mongoose');
-
 const { Schema } = mongoose;
-
-const imageSchema = new Schema(
-    {
-        asset_id: String,
-        public_id: String,
-        version: Number,
-        version_id: String,
-        signature: String,
-        width: Number,
-        height: Number,
-        format: String,
-        resource_type: String,
-        created_at: Date,
-        tags: [String],
-        bytes: Number,
-        type: String,
-        etag: String,
-        placeholder: Boolean,
-        url: String,
-        secure_url: String,
-        folder: String,
-        access_mode: String,
-        original_filename: String,
-        api_key: String,
-    },
-    { _id: false },
-);
+const imageSchema = require('./imageSchema');
 
 const userSchema = new Schema({
-    email: String,
+    email: { type: String, required: true, unique: true },
     account: {
-        username: String,
+        username: { type: String, required: true, trim: true },
         avatar: imageSchema,
     },
     newsletter: Boolean,
-    salt: String,
-    hash: String,
-    token: String,
+    salt: { type: String, required: true },
+    hash: { type: String, required: true },
+    token: { type: String, required: true },
 });
 
 const User = mongoose.model('User', userSchema);
