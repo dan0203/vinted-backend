@@ -8,13 +8,17 @@ const uid2 = require('uid2');
 const signup = async data => {
     // Si aucun username/email/password n'a été fourni
     if (!data.username || !data.email || !data.password) {
-        throw new Error('Email, password and username are mandatory');
+        const error = new Error('Email, password and username are mandatory');
+        error.status = 400;
+        throw error;
     }
 
     // Si un compte existe déjà avec cette adresse email
     const existingUser = await User.findOne({ email: data.email });
     if (existingUser) {
-        throw new Error('An account already exists with this email address');
+        const error = new Error('An account already exists with this email address');
+        error.status = 409;
+        throw error;
     }
 
     // Si les informations fournies sont validées,
@@ -30,9 +34,9 @@ const signup = async data => {
             username: data.username,
         },
         newsletter: data.newsletter,
-        salt: salt,
-        hash: hash,
-        token: token,
+        salt,
+        hash,
+        token,
     });
 
     await newUser.save();
@@ -52,7 +56,9 @@ const login = async data => {
 
     // S'il n'existe pas, erreur
     if (!user) {
-        throw new Error('Unauthorized');
+        const error = new Error('Unauthorized');
+        error.status = 401;
+        throw error;
     }
 
     // S'il existe, tester la crypto
@@ -60,7 +66,9 @@ const login = async data => {
 
     // Si c'est KO, erreur
     if (hashCalculated !== user.hash) {
-        throw new Error('Unauthorized');
+        const error = new Error('Unauthorized');
+        error.status = 401;
+        throw error;
     }
 
     // Si c'est OK, on retourne l'élément (_id, token, account.username)
@@ -74,14 +82,23 @@ const login = async data => {
 };
 
 const getOne = async data => {
-    const user = await User.findOne({ _id: data.id });
+    const user = await User.findById(data.id);
 
     // S'il n'existe pas, erreur
     if (!user) {
-        throw new Error('User does not exist');
+        const error = new Error('User does not exist');
+        error.status = 404;
+        throw error;
     }
 
-    return { _id: user._id, account: { username: user.account.username, avatar: user.account.avatar }, newsletter: user.newsletter };
+    return {
+        _id: user._id,
+        account: {
+            username: user.account.username,
+            avatar: user.account.avatar,
+        },
+        newsletter: user.newsletter,
+    };
 };
 
 module.exports = { signup, login, getOne };
