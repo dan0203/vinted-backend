@@ -1,3 +1,6 @@
+// Modules npm
+const mongoose = require('mongoose');
+const Joi = require('joi');
 // Model
 const User = require('../models/User');
 // Encryption
@@ -5,12 +8,26 @@ const SHA256 = require('crypto-js/sha256');
 const encBase64 = require('crypto-js/enc-base64');
 const uid2 = require('uid2');
 
+// Schémas des formats attendus
+const signupSchema = Joi.object({
+    email: Joi.string().email().required(),
+    password: Joi.string().min(6).required(),
+    username: Joi.string().min(2).max(30).required(),
+    newsletter: Joi.boolean(),
+});
+
+const loginSchema = Joi.object({
+    email: Joi.string().email().required(),
+    password: Joi.string().min(6).required(),
+});
+
 const signup = async data => {
-    // Si aucun username/email/password n'a été fourni
-    if (!data.username || !data.email || !data.password) {
-        const error = new Error('Email, password and username are mandatory');
-        error.status = 400;
-        throw error;
+    // Si les données fournies ne correspondent pas au format attendu
+    const { error } = signupSchema.validate(data);
+    if (error) {
+        const err = new Error(error.details[0].message);
+        err.status = 400;
+        throw err;
     }
 
     // Si un compte existe déjà avec cette adresse email
@@ -51,6 +68,14 @@ const signup = async data => {
 };
 
 const login = async data => {
+    // Si les données fournies ne correspondent pas au format attendu
+    const { error } = loginSchema.validate(data);
+    if (error) {
+        const err = new Error(error.details[0].message);
+        err.status = 400;
+        throw err;
+    }
+
     // Récupérer en bdd le user correspondant à l'email
     const user = await User.findOne({ email: data.email });
 
@@ -82,6 +107,13 @@ const login = async data => {
 };
 
 const getOne = async data => {
+    // Si l'id n'a pas été fourni ou s'il n'est pas au format mongoose
+    if (!data.id || !mongoose.isValidObjectId(data.id)) {
+        const error = new Error('Invalid or missing user id');
+        error.status = 400;
+        throw error;
+    }
+
     const user = await User.findById(data.id);
 
     // S'il n'existe pas, erreur
