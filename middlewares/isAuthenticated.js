@@ -11,7 +11,7 @@ const isAuthenticated = async (req, res, next) => {
     // User.findOne({token: ...})
     const user = await User.findOne({ token: token }).select('email account'); // _id est toujours ajouté sauf si explicitement retiré (-_id)
 
-    // Si j'en trouve pas 401 Unauthorized
+    // Si je n'en trouve pas 401 Unauthorized
     if (!user) {
         return res.status(401).json('Unauthorized');
     }

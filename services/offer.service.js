@@ -4,17 +4,21 @@ const cloudinary = require('cloudinary').v2;
 const mongoose = require('mongoose');
 
 const publish = async data => {
-    // Transforme mon image de Buffer à String
-    const base64Image = convertToBase64(data.files.picture);
-
     // On génère un id MongoDB pour le chemin de stockage de l'image dans cloudinary
     const newOfferId = new mongoose.Types.ObjectId();
 
-    // On fait une requête à cloudinary pour qu'il héberge l'image
-    const cloudinaryResponse = await cloudinary.uploader.upload(base64Image, {
-        // dans un sous-dossier correspondant à l'id de l'offre
-        asset_folder: `/vinted/offers/${newOfferId}`,
-    });
+    let cloudinaryResponse = {};
+
+    if (data.files) {
+        // Transforme mon image de Buffer à String
+        const base64Image = convertToBase64(data.files.picture);
+
+        // On fait une requête à cloudinary pour qu'il héberge l'image
+        cloudinaryResponse = await cloudinary.uploader.upload(base64Image, {
+            // dans un sous-dossier correspondant à l'id de l'offre
+            asset_folder: `/vinted/offers/${newOfferId}`,
+        });
+    }
 
     const newOffer = new Offer({
         _id: newOfferId,
@@ -29,10 +33,10 @@ const publish = async data => {
                 TAILLE: data.body.size,
             },
             {
-                ÉTAT: data.body.condition,
+                COULEUR: data.body.color,
             },
             {
-                COULEUR: data.body.color,
+                ÉTAT: data.body.condition,
             },
             {
                 EMPLACEMENT: data.body.city,
@@ -218,7 +222,7 @@ const getOne = async data => {
         throw error;
     }
 
-    const offer = await Offer.findById(data.id).populate('owner', '_id token account');
+    const offer = await Offer.findById(data.id).populate('owner', '_id token account'); // Filtrer les données à récupérer dans findById plutôt que dans le return ci-dessous : .select('email account')
 
     // 4 : data.id valide au format MongoDB mais offre inexistante
     if (!offer) {
@@ -233,6 +237,7 @@ const getOne = async data => {
     // 8 : accès non autorisé => inutile ici car toute publique
     // 9 : route protégée => inutile ici car route publique
     return {
+        // Filtrer les données à récupérer dans findById ci-dessus plutôt que dans le return ici : .select('email account')
         _id: offer._id,
         product_name: offer.product_name,
         product_description: offer.product_description,
