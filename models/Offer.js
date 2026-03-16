@@ -3,6 +3,7 @@ const mongoose = require('mongoose');
 const { Schema } = mongoose;
 
 const imageSchema = new Schema(
+    // Les champs sensibles retournés par Cloudinary (api_key) sont volontairement exclus
     {
         asset_id: String,
         public_id: String,
@@ -24,7 +25,6 @@ const imageSchema = new Schema(
         folder: String,
         access_mode: String,
         original_filename: String,
-        // api_key: String, // ne pas l'inclure dans la bdd pour des raisons de sécurité et de confidentialité
     },
     { _id: false },
 );
