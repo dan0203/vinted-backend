@@ -30,6 +30,7 @@ const imageSchema = new Schema(
 );
 
 const offerSchema = new Schema({
+    _id: Schema.Types.ObjectId,
     product_name: String,
     product_description: String,
     product_price: Number,
