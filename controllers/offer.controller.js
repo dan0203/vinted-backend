@@ -1,11 +1,13 @@
 // Service
 const offerService = require('../services/offer.service');
 
-const publish = async (req, res) => {
+const publish = async (req, res, next) => {
+    // Les clefs textuelles du formData sont dans req.body
+    // Les clefs fichiers du formData sont dans req.files
     try {
         const data = {
-            body: req.body, // Les clefs textuelles du formData sont dans req.body
-            files: req.files, // Les clefs fichiers du formData sont dans req.files
+            body: req.body,
+            files: req.files,
             user: req.user,
         };
 
@@ -13,28 +15,28 @@ const publish = async (req, res) => {
 
         return res.status(201).json(newOffer);
     } catch (error) {
-        return res.status(500).json(error.message);
+        next(error);
     }
 };
 
-const update = async (req, res) => {
+const update = async (req, res, next) => {
     try {
         const data = {
-            body: req.body, // Les clefs textuelles du formData sont dans req.body
-            files: req.files, // Les clefs fichiers du formData sont dans req.files
+            body: req.body,
+            files: req.files,
             id: req.params.id,
             user: req.user,
         };
 
         const updatedOffer = await offerService.update(data);
 
-        return res.status(201).json(updatedOffer);
+        return res.status(200).json(updatedOffer);
     } catch (error) {
-        return res.status(500).json(error.message);
+        next(error);
     }
 };
 
-const remove = async (req, res) => {
+const remove = async (req, res, next) => {
     try {
         const data = {
             id: req.params.id,
@@ -43,13 +45,13 @@ const remove = async (req, res) => {
 
         const removedOffer = await offerService.remove(data);
 
-        return res.status(201).json(removedOffer);
+        return res.status(200).json(removedOffer);
     } catch (error) {
-        return res.status(500).json(error.message);
+        next(error);
     }
 };
 
-const getAll = async (req, res) => {
+const getAll = async (req, res, next) => {
     try {
         const data = req.query;
 
@@ -57,19 +59,19 @@ const getAll = async (req, res) => {
 
         return res.status(200).json(getAllOffers);
     } catch (error) {
-        return res.status(500).json(error.message);
+        next(error);
     }
 };
 
-const getOne = async (req, res) => {
+const getOne = async (req, res, next) => {
     try {
         const data = req.params;
 
-        const getOne = await offerService.getOne(data);
+        const offer = await offerService.getOne(data);
 
-        return res.status(200).json(getOne);
+        return res.status(200).json(offer);
     } catch (error) {
-        return res.status(error.statusCode || 500).json({ message: error.message });
+        next(error);
     }
 };
 
