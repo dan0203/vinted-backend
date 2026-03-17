@@ -30,7 +30,12 @@ app.all(/.*/, (req, res) => {
 // Middleware de gestion globale d'erreur
 app.use((err, req, res, next) => {
     console.error(err.message);
-    res.status(err.status || 500).json({ message: err.message || 'Internal server error' });
+
+    if (err.status) {
+        return res.status(err.status).json({ message: err.message });
+    }
+
+    return res.status(500).json({ message: 'Internal server error' });
 });
 
 // Connexion DB + démarrage serveur

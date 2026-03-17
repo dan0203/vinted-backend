@@ -1,7 +1,10 @@
-const Offer = require('../models/Offer');
-const convertToBase64 = require('../utils/convertToBase64');
+// Modules npm
 const cloudinary = require('cloudinary').v2;
 const mongoose = require('mongoose');
+// Model
+const Offer = require('../models/Offer');
+// Utils
+const convertToBase64 = require('../utils/convertToBase64');
 
 const publish = async data => {
     // On génère un id MongoDB pour le chemin de stockage de l'image dans cloudinary
@@ -174,11 +177,15 @@ const getAll = async data => {
     const max = data.priceMax !== undefined ? Number(data.priceMax) : undefined;
 
     if ((data.priceMin !== undefined && !Number.isFinite(min)) || (data.priceMax !== undefined && !Number.isFinite(max))) {
-        throw new Error('Invalid price filter');
+        const error = new Error('Invalid price filter');
+        error.status = 400;
+        throw error;
     }
 
     if (Number.isFinite(min) && Number.isFinite(max) && min > max) {
-        throw new Error('priceMin must be less than or equal to priceMax');
+        const error = new Error('priceMin must be less than or equal to priceMax');
+        error.status = 400;
+        throw error;
     }
 
     if (Number.isFinite(min) || Number.isFinite(max)) {
@@ -205,39 +212,30 @@ const getAll = async data => {
 };
 
 const getOne = async data => {
-    // 1 : data et data.id absent
-    // 2 : data.id vide ou undefined ou null ou '' ou ' '
-    // Pas utile dans notre cas car le routing ne fera pas appel à cette route dans ce cas,
-    //  mais permet de rendre le service indépendant du routing (sauf pour une chaîne vide)
+    // data ou data.id falsy (absent, null, chaîne vide...)
     if (!data || !data.id || String(data.id).trim() === '') {
         const error = new Error('Offer id is mandatory');
-        error.statusCode = 400;
+        error.status = 400;
         throw error;
     }
 
-    // 3 : data.id au mauvais format
+    // data.id au mauvais format
     if (!mongoose.Types.ObjectId.isValid(data.id)) {
         const error = new Error('Invalid offer id');
-        error.statusCode = 400;
+        error.status = 400;
         throw error;
     }
 
-    const offer = await Offer.findById(data.id).populate('owner', '_id token account'); // Filtrer les données à récupérer dans findById plutôt que dans le return ci-dessous : .select('email account')
+    const offer = await Offer.findById(data.id).populate('owner', '_id token account');
 
-    // 4 : data.id valide au format MongoDB mais offre inexistante
+    // data.id valide au format MongoDB mais offre inexistante
     if (!offer) {
         const error = new Error('Offer does not exist');
-        error.statusCode = 404;
+        error.status = 404;
         throw error;
     }
 
-    // 5 : data.id valide et offre existante
-    // 6 : ne pas envoyer les champs sensibles (s'il y en a) ; ne renvoyer que les champs utiles
-    // 7 : les champs de l'objet renvoyé sont maîtrisés et gérés par l'API
-    // 8 : accès non autorisé => inutile ici car toute publique
-    // 9 : route protégée => inutile ici car route publique
     return {
-        // Filtrer les données à récupérer dans findById ci-dessus plutôt que dans le return ici : .select('email account')
         _id: offer._id,
         product_name: offer.product_name,
         product_description: offer.product_description,

@@ -23,11 +23,11 @@ const loginSchema = Joi.object({
 
 const signup = async data => {
     // Si les données fournies ne correspondent pas au format attendu
-    const { error } = signupSchema.validate(data);
-    if (error) {
-        const err = new Error(error.details[0].message);
-        err.status = 400;
-        throw err;
+    const { err } = signupSchema.validate(data);
+    if (err) {
+        const error = new Error(err.details[0].message);
+        error.status = 400;
+        throw error;
     }
 
     // Si un compte existe déjà avec cette adresse email
@@ -69,11 +69,11 @@ const signup = async data => {
 
 const login = async data => {
     // Si les données fournies ne correspondent pas au format attendu
-    const { error } = loginSchema.validate(data);
-    if (error) {
-        const err = new Error(error.details[0].message);
-        err.status = 400;
-        throw err;
+    const { err } = loginSchema.validate(data);
+    if (err) {
+        const error = new Error(err.details[0].message);
+        error.status = 400;
+        throw error;
     }
 
     // Récupérer en bdd le user correspondant à l'email
