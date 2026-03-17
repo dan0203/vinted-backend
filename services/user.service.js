@@ -8,6 +8,8 @@ const SHA256 = require('crypto-js/sha256');
 const encBase64 = require('crypto-js/enc-base64');
 const uid2 = require('uid2');
 
+// Dans ce service, la validation des données se fait grâce au package Joi, comparé à offer service où on les effectue manuellement
+
 // Schémas des formats attendus
 const signupSchema = Joi.object({
     email: Joi.string().email().required(),
@@ -23,11 +25,11 @@ const loginSchema = Joi.object({
 
 const signup = async data => {
     // Si les données fournies ne correspondent pas au format attendu
-    const { err } = signupSchema.validate(data);
-    if (err) {
-        const error = new Error(err.details[0].message);
-        error.status = 400;
-        throw error;
+    const { error } = signupSchema.validate(data);
+    if (error) {
+        const customError = new Error(error.details[0].message);
+        customError.status = 400;
+        throw customError;
     }
 
     // Si un compte existe déjà avec cette adresse email

@@ -6,6 +6,8 @@ const Offer = require('../models/Offer');
 // Utils
 const convertToBase64 = require('../utils/convertToBase64');
 
+// Dans ce service, la validation des données se fait manuellement, comparé à user service qui utilise le package Joi
+
 const publish = async data => {
     if (data.body.title === undefined || data.body.title.trim() === '') {
         const error = new Error('Title is mandatory');
