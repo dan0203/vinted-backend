@@ -98,7 +98,7 @@ const publish = async data => {
         throw error;
     }
 
-    await newOffer.populate('owner', '_id token account');
+    await newOffer.populate('owner', '_id account');
 
     return newOffer;
 };
@@ -238,7 +238,7 @@ const update = async data => {
         throw error;
     }
 
-    await updatedOffer.populate('owner', '_id token account');
+    await updatedOffer.populate('owner', '_id account');
 
     const updatedOfferToReturn = {
         product_name: updatedOffer.product_name,
@@ -353,7 +353,7 @@ const getAll = async data => {
     sort = sort.replace('price-', '');
 
     // Récupération des offres correspondant aux filtres et à la page demandés
-    const offers = await Offer.find(filters).populate('owner', '_id token account').sort({ product_price: sort }).limit(nbOffersPerPage).skip(nbOffersToSkip);
+    const offers = await Offer.find(filters).populate('owner', '_id account').sort({ product_price: sort }).limit(nbOffersPerPage).skip(nbOffersToSkip);
 
     // Nombre de documents correspondant aux filtres
     const count = await Offer.countDocuments(filters);
@@ -376,7 +376,7 @@ const getOne = async data => {
         throw error;
     }
 
-    const offer = await Offer.findById(data.id).populate('owner', '_id token account');
+    const offer = await Offer.findById(data.id).populate('owner', '_id account');
 
     // data.id valide au format MongoDB mais offre inexistante
     if (!offer) {
