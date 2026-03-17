@@ -104,52 +104,141 @@ const publish = async data => {
 };
 
 const update = async data => {
+    // data.id est une chaîne vide
+    if (data.id.trim() === '') {
+        const error = new Error('Offer id is mandatory');
+        error.status = 400;
+        throw error;
+    }
+
+    // data.id au mauvais format
+    if (!mongoose.Types.ObjectId.isValid(data.id)) {
+        const error = new Error('Invalid offer id');
+        error.status = 400;
+        throw error;
+    }
+
+    if (data.body.title === undefined || data.body.title.trim() === '') {
+        const error = new Error('Title is mandatory');
+        error.status = 400;
+        throw error;
+    }
+
+    if (data.body.description === undefined || data.body.description.trim() === '') {
+        const error = new Error('Description is mandatory');
+        error.status = 400;
+        throw error;
+    }
+
+    if (data.body.price === undefined || data.body.price.trim() === '') {
+        const error = new Error('Price is mandatory');
+        error.status = 400;
+        throw error;
+    }
+
+    const price = Number(data.body.price);
+    if (!Number.isFinite(price)) {
+        const error = new Error('Price must be a number');
+        error.status = 400;
+        throw error;
+    }
+
+    if (price < 0) {
+        const error = new Error('Price must be greater than or equal to 0');
+        error.status = 400;
+        throw error;
+    }
+
     // Vérifier que le user est bien le owner de cette offre
     const offerToUpdate = await Offer.findById(data.id);
 
-    if (!data.user._id.equals(offerToUpdate.owner._id)) {
-        throw new Error('Unauthorized');
+    // Pas d'offre existante
+    if (!offerToUpdate) {
+        const error = new Error('Offer does not exist');
+        error.status = 404;
+        throw error;
     }
 
-    // Transforme mon image de Buffer à String
-    const base64Image = convertToBase64(data.files.picture);
+    // L'offre n'appartient pas au user connecté
+    if (!data.user._id.equals(offerToUpdate.owner._id)) {
+        const error = new Error('Unauthorized');
+        error.status = 403;
+        throw error;
+    }
 
-    // Je fais une requête à cloudinary pour qu'il héberge mon image
-    const cloudinaryResponse = await cloudinary.uploader.upload(base64Image, {
-        asset_folder: `/vinted/offers/`, // asset_folder: `/vinted/offers/${data.id}`,
-    });
+    let cloudinaryResponse = null;
+    const folderPath = `vinted/offers/${data.id}`;
 
-    const updatedOffer = await Offer.findByIdAndUpdate(
-        data.id,
-        {
-            product_name: data.body.title,
-            product_description: data.body.description,
-            product_price: data.body.price,
-            product_details: [
-                {
-                    MARQUE: data.body.brand,
-                },
-                {
-                    TAILLE: data.body.size,
-                },
-                {
-                    ÉTAT: data.body.condition,
-                },
-                {
-                    COULEUR: data.body.color,
-                },
-                {
-                    EMPLACEMENT: data.body.city,
-                },
-            ],
-            product_image: {
-                public_id: cloudinaryResponse.public_id,
-                secure_url: cloudinaryResponse.secure_url,
+    if (data.files) {
+        if (!data.files.picture) {
+            const error = new Error('Picture file must be sent using a param named "picture"');
+            error.status = 400;
+            throw error;
+        }
+
+        // Transforme mon image de Buffer à String
+        const base64Image = convertToBase64(data.files.picture);
+
+        // On fait une requête à cloudinary pour qu'il héberge l'image
+        cloudinaryResponse = await cloudinary.uploader.upload(base64Image, {
+            // dans un sous-dossier correspondant à l'id de l'offre
+            asset_folder: folderPath,
+        });
+    }
+
+    const updateData = {
+        product_name: data.body.title,
+        product_description: data.body.description,
+        product_price: price,
+        product_details: [
+            {
+                MARQUE: data.body.brand,
             },
-            owner: data.user._id,
-        },
-        { new: true },
-    );
+            {
+                TAILLE: data.body.size,
+            },
+            {
+                ÉTAT: data.body.condition,
+            },
+            {
+                COULEUR: data.body.color,
+            },
+            {
+                EMPLACEMENT: data.body.city,
+            },
+        ],
+        product_pictures: [], // Si besoin d'uploader plusieurs images
+        owner: data.user._id,
+    };
+
+    if (cloudinaryResponse) {
+        updateData.product_image = cloudinaryResponse;
+    }
+
+    let updatedOffer;
+
+    try {
+        updatedOffer = await Offer.findByIdAndUpdate(data.id, updateData, { new: true, runValidators: true });
+    } catch (error) {
+        if (cloudinaryResponse && cloudinaryResponse.public_id) {
+            await cloudinary.uploader.destroy(cloudinaryResponse.public_id);
+        }
+        throw error;
+    }
+
+    // S'il y a une erreur dans findByIdAndUpdate, il renvoie un élément vide
+    // Dans ce cas, supprimer l'image que l'on vient d'uploader et lever une exception
+    if (!updatedOffer) {
+        if (cloudinaryResponse && cloudinaryResponse.public_id) {
+            await cloudinary.uploader.destroy(cloudinaryResponse.public_id);
+        }
+
+        const error = new Error('Failed to update offer');
+        error.status = 500;
+        throw error;
+    }
+
+    await updatedOffer.populate('owner', '_id token account');
 
     const updatedOfferToReturn = {
         product_name: updatedOffer.product_name,
@@ -157,14 +246,13 @@ const update = async data => {
         product_price: updatedOffer.product_price,
         product_details: updatedOffer.product_details,
         product_image: updatedOffer.product_image,
-        owner: {
-            account: data.user.account,
-            _id: data.user._id,
-        },
+        owner: updatedOffer.owner,
     };
 
     // Si tout s'est bien passé, on supprime l'ancienne image
-    await cloudinary.uploader.destroy(offerToUpdate.product_image.public_id);
+    if (cloudinaryResponse && offerToUpdate.product_image.public_id) {
+        await cloudinary.uploader.destroy(offerToUpdate.product_image.public_id);
+    }
 
     return updatedOfferToReturn;
 };

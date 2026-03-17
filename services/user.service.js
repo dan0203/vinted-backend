@@ -82,7 +82,7 @@ const login = async data => {
     // S'il n'existe pas, erreur
     if (!user) {
         const error = new Error('Unauthorized');
-        error.status = 401;
+        error.status = 403;
         throw error;
     }
 
