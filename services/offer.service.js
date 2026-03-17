@@ -173,17 +173,18 @@ const getAll = async data => {
     }
 
     // Filtres priceMin et priceMax
-    const min = data.priceMin !== undefined ? Number(data.priceMin) : undefined;
-    const max = data.priceMax !== undefined ? Number(data.priceMax) : undefined;
+    const min = data.priceMin === undefined ? undefined : Number(data.priceMin);
+    const max = data.priceMax === undefined ? undefined : Number(data.priceMax);
 
-    if ((data.priceMin !== undefined && !Number.isFinite(min)) || (data.priceMax !== undefined && !Number.isFinite(max))) {
+    // si priceMin ou priceMax ne sont pas des nombres strictement positifs
+    if ((data.priceMin !== undefined && !Number.isFinite(min)) || (Number.isFinite(min) && min < 0) || (data.priceMax !== undefined && !Number.isFinite(max)) || (Number.isFinite(max) && max < 0)) {
         const error = new Error('Invalid price filter');
         error.status = 400;
         throw error;
     }
 
     if (Number.isFinite(min) && Number.isFinite(max) && min > max) {
-        const error = new Error('priceMin must be less than or equal to priceMax');
+        const error = new Error('priceMin cannot be greater than priceMax');
         error.status = 400;
         throw error;
     }
@@ -195,12 +196,27 @@ const getAll = async data => {
     }
 
     // Filtre page
-    const page = data.page ? data.page : 1;
+    const page = data.page === undefined ? 1 : Number(data.page);
+
+    if (!Number.isFinite(page) || page <= 0) {
+        const error = new Error('Invalid page filter');
+        error.status = 400;
+        throw error;
+    }
+
     const nbOffersPerPage = 20;
     const nbOffersToSkip = nbOffersPerPage * (page - 1);
 
     // Filtre sort
-    const sort = data.sort ? data.sort.replace('price-', '') : 'asc';
+    let sort = data.sort === undefined ? 'price-asc' : data.sort;
+
+    if (sort !== 'price-asc' && sort !== 'price-desc') {
+        const error = new Error('Invalid sort filter');
+        error.status = 400;
+        throw error;
+    }
+
+    sort = sort.replace('price-', '');
 
     // Récupération des offres correspondant aux filtres et à la page demandés
     const offers = await Offer.find(filters).populate('owner', '_id token account').sort({ product_price: sort }).limit(nbOffersPerPage).skip(nbOffersToSkip);
