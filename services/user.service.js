@@ -71,11 +71,11 @@ const signup = async data => {
 
 const login = async data => {
     // Si les données fournies ne correspondent pas au format attendu
-    const { err } = loginSchema.validate(data);
-    if (err) {
-        const error = new Error(err.details[0].message);
-        error.status = 400;
-        throw error;
+    const { error } = loginSchema.validate(data);
+    if (error) {
+        const customError = new Error(error.details[0].message);
+        customError.status = 400;
+        throw customError;
     }
 
     // Récupérer en bdd le user correspondant à l'email
@@ -94,7 +94,7 @@ const login = async data => {
     // Si c'est KO, erreur
     if (hashCalculated !== user.hash) {
         const error = new Error('Unauthorized');
-        error.status = 401;
+        error.status = 403;
         throw error;
     }
 
