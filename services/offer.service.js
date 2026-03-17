@@ -149,7 +149,7 @@ const update = async data => {
         throw error;
     }
 
-    // Vérifier que le user est bien le owner de cette offre
+    // Vérifier que l'offre existe
     const offerToUpdate = await Offer.findById(data.id);
 
     // Pas d'offre existante
@@ -258,44 +258,70 @@ const update = async data => {
 };
 
 const remove = async data => {
-    // Vérifier que le user est bien le owner de cette offre
+    // data ou data.id falsy (absent, null, chaîne vide...)
+    if (!data || !data.id || String(data.id).trim() === '') {
+        const error = new Error('Offer id is mandatory');
+        error.status = 400;
+        throw error;
+    }
+
+    // data.id au mauvais format
+    if (!mongoose.Types.ObjectId.isValid(data.id)) {
+        const error = new Error('Invalid offer id');
+        error.status = 400;
+        throw error;
+    }
+
+    // Vérifier que l'offre existe
     const offerToRemove = await Offer.findById(data.id);
 
+    // Pas d'offre existante
     if (!offerToRemove) {
-        throw new Error('Offer does not exist');
+        const error = new Error('Offer does not exist');
+        error.status = 404;
+        throw error;
     }
 
-    // 8 : accès non autorisé => middleware + test ci-dessous
+    // L'offre n'appartient pas au user connecté
     if (!data.user._id.equals(offerToRemove.owner._id)) {
-        throw new Error('Unauthorized');
+        const error = new Error('Unauthorized');
+        error.status = 403;
+        throw error;
     }
 
-    // 9 : route protégée => middleware dans la route
+    let removedOffer;
 
-    // Supprimer de la bdd
-    await Offer.findByIdAndDelete(data.id);
+    removedOffer = await Offer.findByIdAndDelete(data.id).populate('owner', '_id account');
 
-    // NOTE: suppression images + dossier à terminer
-    // Supprimer dans cloudinary : le dossier complet (ici, uniquement l'ancienne image)
-    // await cloudinary.uploader.destroy(offerToRemove.product_image.public_id);
-    // await cloudinary.api.delete_resources_by_prefix(
-    //     `/vinted/${offerToRemove._id}/`,
-    //     function (result) {
-    //         console.log(result);
-    //     },
-    // );
+    // S'il y a une erreur dans findByIdAndDelete, il renvoie un élément vide
+    // Dans ce cas, lever une exception
+    if (!removedOffer) {
+        const error = new Error('Offer does not exist');
+        error.status = 404;
+        throw error;
+    }
 
-    // 1. Supprimer tous les assets du dossier
-    // console.log(`vinted/offers/${offerToRemove._id}/`);
+    // Si tout s'est bien passé, on supprime les images du dossier et le dossier lui-même dans Cloudinary
+    if (removedOffer.product_image.public_id) {
+        try {
+            await cloudinary.uploader.destroy(removedOffer.product_image.public_id);
+            await cloudinary.api.delete_folder(`vinted/offers/${removedOffer._id}`);
+        } catch (error) {
+            console.error('Cloudinary cleanup failed:', error.message);
+        }
+    }
 
-    // await cloudinary.api.delete_resources_by_prefix(
-    //     `vinted/offers/${offerToRemove._id}/`,
-    // );
-
-    // // 2. Supprimer le dossier vide
-    // await cloudinary.api.delete_folder(`/vinted/offers/${offerToRemove._id}`);
-
-    return 'Deleted';
+    return {
+        _id: removedOffer._id,
+        product_name: removedOffer.product_name,
+        product_description: removedOffer.product_description,
+        product_price: removedOffer.product_price,
+        product_details: removedOffer.product_details,
+        product_pictures: removedOffer.product_pictures,
+        product_image: removedOffer.product_image,
+        product_date: removedOffer.product_date,
+        owner: removedOffer.owner,
+    };
 };
 
 const getAll = async data => {
