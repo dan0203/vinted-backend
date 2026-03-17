@@ -19,7 +19,7 @@ const offerSchema = new Schema({
     owner: { type: Schema.Types.ObjectId, ref: 'User', required: true },
     product_image: {
         type: imageSchema,
-        default: null,
+        default: {},
     },
     product_date: {
         type: Date,

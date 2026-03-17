@@ -7,19 +7,57 @@ const Offer = require('../models/Offer');
 const convertToBase64 = require('../utils/convertToBase64');
 
 const publish = async data => {
+    if (data.body.title === undefined || data.body.title.trim() === '') {
+        const error = new Error('Title is mandatory');
+        error.status = 400;
+        throw error;
+    }
+
+    if (data.body.description === undefined || data.body.description.trim() === '') {
+        const error = new Error('Description is mandatory');
+        error.status = 400;
+        throw error;
+    }
+
+    if (data.body.price === undefined || data.body.price.trim() === '') {
+        const error = new Error('Price is mandatory');
+        error.status = 400;
+        throw error;
+    }
+
+    const price = Number(data.body.price);
+    if (!Number.isFinite(price)) {
+        const error = new Error('Price must be a number');
+        error.status = 400;
+        throw error;
+    }
+
+    if (price < 0) {
+        const error = new Error('Price must be greater than or equal to 0');
+        error.status = 400;
+        throw error;
+    }
+
     // On génère un id MongoDB pour le chemin de stockage de l'image dans cloudinary
     const newOfferId = new mongoose.Types.ObjectId();
 
     let cloudinaryResponse = {};
+    const folderPath = `vinted/offers/${newOfferId}`;
 
     if (data.files) {
+        if (!data.files.picture) {
+            const error = new Error('Picture file must be sent using a param named "picture"');
+            error.status = 400;
+            throw error;
+        }
+
         // Transforme mon image de Buffer à String
         const base64Image = convertToBase64(data.files.picture);
 
         // On fait une requête à cloudinary pour qu'il héberge l'image
         cloudinaryResponse = await cloudinary.uploader.upload(base64Image, {
             // dans un sous-dossier correspondant à l'id de l'offre
-            asset_folder: `/vinted/offers/${newOfferId}`,
+            asset_folder: folderPath,
         });
     }
 
@@ -27,7 +65,7 @@ const publish = async data => {
         _id: newOfferId,
         product_name: data.body.title,
         product_description: data.body.description,
-        product_price: data.body.price,
+        product_price: price,
         product_details: [
             {
                 MARQUE: data.body.brand,
@@ -50,7 +88,15 @@ const publish = async data => {
         owner: data.user._id,
     });
 
-    await newOffer.save();
+    try {
+        await newOffer.save();
+    } catch (error) {
+        if (cloudinaryResponse.public_id) {
+            await cloudinary.uploader.destroy(cloudinaryResponse.public_id);
+            await cloudinary.api.delete_folder(folderPath);
+        }
+        throw error;
+    }
 
     await newOffer.populate('owner', '_id token account');
 
