@@ -27,6 +27,8 @@ const offerSchema = new Schema({
     },
 });
 
+offerSchema.index({ product_price: 1 });
+
 const Offer = mongoose.model('Offer', offerSchema);
 
 module.exports = Offer;
