@@ -40,7 +40,7 @@ app.use((err, req, res) => {
 
 // Connexion DB + démarrage serveur
 mongoose
-    .connect(process.env.MONGODB_URI + '/vinted')
+    .connect(process.env.MONGODB_URI, { dbName: 'vinted' })
     .then(() => {
         console.log('MongoDB connected');
 
