@@ -28,7 +28,7 @@ app.all(/.*/, (req, res) => {
 });
 
 // Middleware de gestion globale d'erreur
-app.use((err, req, res, next) => {
+app.use((err, req, res) => {
     console.error(err.message);
 
     if (err.status) {

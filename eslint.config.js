@@ -1,4 +1,5 @@
 const js = require('@eslint/js');
+const globals = require('globals');
 const prettierConfig = require('eslint-config-prettier');
 
 module.exports = [
@@ -8,12 +9,7 @@ module.exports = [
         languageOptions: {
             ecmaVersion: 'latest',
             sourceType: 'commonjs',
-            globals: {
-                require: 'readonly',
-                module: 'writable',
-                process: 'readonly',
-                __dirname: 'readonly',
-            },
+            globals: globals.node,
         },
         rules: {
             'no-unused-vars': 'warn',
