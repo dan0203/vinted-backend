@@ -6,6 +6,7 @@ const Offer = require('../models/Offer');
 // Utils
 const convertToBase64 = require('../utils/convertToBase64');
 const throwError = require('../utils/throwError');
+const escapeRegex = require('../utils/escapeRegex');
 
 // Dans ce service, la validation des données se fait manuellement, comparé à user service qui utilise le package Joi
 
@@ -315,7 +316,7 @@ const getAll = async (data) => {
 
     // Filtre title
     if (data.title) {
-        filters.product_name = new RegExp(data.title, 'i');
+        filters.product_name = new RegExp(escapeRegex(data.title), 'i');
     }
 
     // Filtres priceMin et priceMax
