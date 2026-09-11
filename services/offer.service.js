@@ -5,42 +5,33 @@ const mongoose = require('mongoose');
 const Offer = require('../models/Offer');
 // Utils
 const convertToBase64 = require('../utils/convertToBase64');
+const throwError = require('../utils/throwError');
 
 // Dans ce service, la validation des données se fait manuellement, comparé à user service qui utilise le package Joi
 
 const publish = async (data) => {
     if (data.body.title === undefined || data.body.title.trim() === '') {
-        const error = new Error('Title is mandatory');
-        error.status = 400;
-        throw error;
+        throwError('Title is mandatory', 400);
     }
 
     if (
         data.body.description === undefined ||
         data.body.description.trim() === ''
     ) {
-        const error = new Error('Description is mandatory');
-        error.status = 400;
-        throw error;
+        throwError('Description is mandatory', 400);
     }
 
     if (data.body.price === undefined || data.body.price.trim() === '') {
-        const error = new Error('Price is mandatory');
-        error.status = 400;
-        throw error;
+        throwError('Price is mandatory', 400);
     }
 
     const price = Number(data.body.price);
     if (!Number.isFinite(price)) {
-        const error = new Error('Price must be a number');
-        error.status = 400;
-        throw error;
+        throwError('Price must be a number', 400);
     }
 
     if (price < 0) {
-        const error = new Error('Price must be greater than or equal to 0');
-        error.status = 400;
-        throw error;
+        throwError('Price must be greater than or equal to 0', 400);
     }
 
     // On génère un id MongoDB pour le chemin de stockage de l'image dans cloudinary
@@ -51,11 +42,10 @@ const publish = async (data) => {
 
     if (data.files) {
         if (!data.files.picture) {
-            const error = new Error(
-                'Picture file must be sent using a param named "picture"'
+            throwError(
+                'Picture file must be sent using a param named "picture"',
+                400
             );
-            error.status = 400;
-            throw error;
         }
 
         // Transforme mon image de Buffer à String
@@ -113,50 +103,36 @@ const publish = async (data) => {
 const update = async (data) => {
     // data.id est une chaîne vide
     if (data.id.trim() === '') {
-        const error = new Error('Offer id is mandatory');
-        error.status = 400;
-        throw error;
+        throwError('Offer id is mandatory', 400);
     }
 
     // data.id au mauvais format
     if (!mongoose.Types.ObjectId.isValid(data.id)) {
-        const error = new Error('Invalid offer id');
-        error.status = 400;
-        throw error;
+        throwError('Invalid offer id', 400);
     }
 
     if (data.body.title === undefined || data.body.title.trim() === '') {
-        const error = new Error('Title is mandatory');
-        error.status = 400;
-        throw error;
+        throwError('Title is mandatory', 400);
     }
 
     if (
         data.body.description === undefined ||
         data.body.description.trim() === ''
     ) {
-        const error = new Error('Description is mandatory');
-        error.status = 400;
-        throw error;
+        throwError('Description is mandatory', 400);
     }
 
     if (data.body.price === undefined || data.body.price.trim() === '') {
-        const error = new Error('Price is mandatory');
-        error.status = 400;
-        throw error;
+        throwError('Price is mandatory', 400);
     }
 
     const price = Number(data.body.price);
     if (!Number.isFinite(price)) {
-        const error = new Error('Price must be a number');
-        error.status = 400;
-        throw error;
+        throwError('Price must be a number', 400);
     }
 
     if (price < 0) {
-        const error = new Error('Price must be greater than or equal to 0');
-        error.status = 400;
-        throw error;
+        throwError('Price must be greater than or equal to 0', 400);
     }
 
     // Vérifier que l'offre existe
@@ -164,16 +140,12 @@ const update = async (data) => {
 
     // Pas d'offre existante
     if (!offerToUpdate) {
-        const error = new Error('Offer does not exist');
-        error.status = 404;
-        throw error;
+        throwError('Offer does not exist', 404);
     }
 
     // L'offre n'appartient pas au user connecté
     if (!data.user._id.equals(offerToUpdate.owner._id)) {
-        const error = new Error('Unauthorized');
-        error.status = 403;
-        throw error;
+        throwError('Unauthorized', 403);
     }
 
     let cloudinaryResponse = null;
@@ -181,11 +153,10 @@ const update = async (data) => {
 
     if (data.files) {
         if (!data.files.picture) {
-            const error = new Error(
-                'Picture file must be sent using a param named "picture"'
+            throwError(
+                'Picture file must be sent using a param named "picture"',
+                400
             );
-            error.status = 400;
-            throw error;
         }
 
         // Transforme mon image de Buffer à String
@@ -248,9 +219,7 @@ const update = async (data) => {
             await cloudinary.uploader.destroy(cloudinaryResponse.public_id);
         }
 
-        const error = new Error('Failed to update offer');
-        error.status = 500;
-        throw error;
+        throwError('Failed to update offer', 500);
     }
 
     await updatedOffer.populate('owner', '_id account');
@@ -277,16 +246,12 @@ const update = async (data) => {
 const remove = async (data) => {
     // data ou data.id falsy (absent, null, chaîne vide...)
     if (!data || !data.id || String(data.id).trim() === '') {
-        const error = new Error('Offer id is mandatory');
-        error.status = 400;
-        throw error;
+        throwError('Offer id is mandatory', 400);
     }
 
     // data.id au mauvais format
     if (!mongoose.Types.ObjectId.isValid(data.id)) {
-        const error = new Error('Invalid offer id');
-        error.status = 400;
-        throw error;
+        throwError('Invalid offer id', 400);
     }
 
     // Vérifier que l'offre existe
@@ -294,16 +259,12 @@ const remove = async (data) => {
 
     // Pas d'offre existante
     if (!offerToRemove) {
-        const error = new Error('Offer does not exist');
-        error.status = 404;
-        throw error;
+        throwError('Offer does not exist', 404);
     }
 
     // L'offre n'appartient pas au user connecté
     if (!data.user._id.equals(offerToRemove.owner._id)) {
-        const error = new Error('Unauthorized');
-        error.status = 403;
-        throw error;
+        throwError('Unauthorized', 403);
     }
 
     let removedOffer;
@@ -316,9 +277,7 @@ const remove = async (data) => {
     // S'il y a une erreur dans findByIdAndDelete, il renvoie un élément vide
     // Dans ce cas, lever une exception
     if (!removedOffer) {
-        const error = new Error('Offer does not exist');
-        error.status = 404;
-        throw error;
+        throwError('Offer does not exist', 404);
     }
 
     // Si tout s'est bien passé, on supprime les images du dossier et le dossier lui-même dans Cloudinary
@@ -370,15 +329,11 @@ const getAll = async (data) => {
         (data.priceMax !== undefined && !Number.isFinite(max)) ||
         (Number.isFinite(max) && max < 0)
     ) {
-        const error = new Error('Invalid price filter');
-        error.status = 400;
-        throw error;
+        throwError('Invalid price filter', 400);
     }
 
     if (Number.isFinite(min) && Number.isFinite(max) && min > max) {
-        const error = new Error('priceMin cannot be greater than priceMax');
-        error.status = 400;
-        throw error;
+        throwError('priceMin cannot be greater than priceMax', 400);
     }
 
     if (Number.isFinite(min) || Number.isFinite(max)) {
@@ -391,9 +346,7 @@ const getAll = async (data) => {
     const page = data.page === undefined ? 1 : Number(data.page);
 
     if (!Number.isFinite(page) || page <= 0) {
-        const error = new Error('Invalid page filter');
-        error.status = 400;
-        throw error;
+        throwError('Invalid page filter', 400);
     }
 
     const nbOffersPerPage = 20;
@@ -403,9 +356,7 @@ const getAll = async (data) => {
     let sort = data.sort === undefined ? 'price-asc' : data.sort;
 
     if (sort !== 'price-asc' && sort !== 'price-desc') {
-        const error = new Error('Invalid sort filter');
-        error.status = 400;
-        throw error;
+        throwError('Invalid sort filter', 400);
     }
 
     sort = sort.replace('price-', '');
@@ -426,16 +377,12 @@ const getAll = async (data) => {
 const getOne = async (data) => {
     // data ou data.id falsy (absent, null, chaîne vide...)
     if (!data || !data.id || String(data.id).trim() === '') {
-        const error = new Error('Offer id is mandatory');
-        error.status = 400;
-        throw error;
+        throwError('Offer id is mandatory', 400);
     }
 
     // data.id au mauvais format
     if (!mongoose.Types.ObjectId.isValid(data.id)) {
-        const error = new Error('Invalid offer id');
-        error.status = 400;
-        throw error;
+        throwError('Invalid offer id', 400);
     }
 
     const offer = await Offer.findById(data.id).populate(
@@ -445,9 +392,7 @@ const getOne = async (data) => {
 
     // data.id valide au format MongoDB mais offre inexistante
     if (!offer) {
-        const error = new Error('Offer does not exist');
-        error.status = 404;
-        throw error;
+        throwError('Offer does not exist', 404);
     }
 
     return {

@@ -7,6 +7,8 @@ const User = require('../models/User');
 const SHA256 = require('crypto-js/sha256');
 const encBase64 = require('crypto-js/enc-base64');
 const uid2 = require('uid2');
+// Utils
+const throwError = require('../utils/throwError');
 
 // Dans ce service, la validation des données se fait grâce au package Joi, comparé à offer service où on les effectue manuellement
 
@@ -27,19 +29,13 @@ const signup = async (data) => {
     // Si les données fournies ne correspondent pas au format attendu
     const { error } = signupSchema.validate(data);
     if (error) {
-        const customError = new Error(error.details[0].message);
-        customError.status = 400;
-        throw customError;
+        throwError(error.details[0].message, 400);
     }
 
     // Si un compte existe déjà avec cette adresse email
     const existingUser = await User.findOne({ email: data.email });
     if (existingUser) {
-        const error = new Error(
-            'An account already exists with this email address'
-        );
-        error.status = 409;
-        throw error;
+        throwError('An account already exists with this email address', 409);
     }
 
     // Si les informations fournies sont validées,
@@ -75,9 +71,7 @@ const login = async (data) => {
     // Si les données fournies ne correspondent pas au format attendu
     const { error } = loginSchema.validate(data);
     if (error) {
-        const customError = new Error(error.details[0].message);
-        customError.status = 400;
-        throw customError;
+        throwError(error.details[0].message, 400);
     }
 
     // Récupérer en bdd le user correspondant à l'email
@@ -85,9 +79,7 @@ const login = async (data) => {
 
     // S'il n'existe pas, erreur
     if (!user) {
-        const error = new Error('Unauthorized');
-        error.status = 403;
-        throw error;
+        throwError('Unauthorized', 403);
     }
 
     // S'il existe, tester la crypto
@@ -97,9 +89,7 @@ const login = async (data) => {
 
     // Si c'est KO, erreur
     if (hashCalculated !== user.hash) {
-        const error = new Error('Unauthorized');
-        error.status = 403;
-        throw error;
+        throwError('Unauthorized', 403);
     }
 
     // Si c'est OK, on retourne l'élément (_id, token, account.username)
@@ -115,18 +105,14 @@ const login = async (data) => {
 const getOne = async (data) => {
     // Si l'id n'a pas été fourni ou s'il n'est pas au format mongoose
     if (!data.id || !mongoose.isValidObjectId(data.id)) {
-        const error = new Error('Invalid or missing user id');
-        error.status = 400;
-        throw error;
+        throwError('Invalid or missing user id', 400);
     }
 
     const user = await User.findById(data.id);
 
     // S'il n'existe pas, erreur
     if (!user) {
-        const error = new Error('User does not exist');
-        error.status = 404;
-        throw error;
+        throwError('User does not exist', 404);
     }
 
     return {
