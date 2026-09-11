@@ -49,7 +49,7 @@ mongoose
             console.log('Server started');
         });
     })
-    .catch(err => {
+    .catch((err) => {
         console.error('MongoDB connection failed:', err.message);
         process.exit(1); // Inutile de démarrer sans BDD
     });

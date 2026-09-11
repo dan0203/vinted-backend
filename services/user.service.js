@@ -23,7 +23,7 @@ const loginSchema = Joi.object({
     password: Joi.string().min(6).required(),
 });
 
-const signup = async data => {
+const signup = async (data) => {
     // Si les données fournies ne correspondent pas au format attendu
     const { error } = signupSchema.validate(data);
     if (error) {
@@ -35,7 +35,9 @@ const signup = async data => {
     // Si un compte existe déjà avec cette adresse email
     const existingUser = await User.findOne({ email: data.email });
     if (existingUser) {
-        const error = new Error('An account already exists with this email address');
+        const error = new Error(
+            'An account already exists with this email address'
+        );
         error.status = 409;
         throw error;
     }
@@ -69,7 +71,7 @@ const signup = async data => {
     };
 };
 
-const login = async data => {
+const login = async (data) => {
     // Si les données fournies ne correspondent pas au format attendu
     const { error } = loginSchema.validate(data);
     if (error) {
@@ -89,7 +91,9 @@ const login = async data => {
     }
 
     // S'il existe, tester la crypto
-    const hashCalculated = SHA256(data.password + user.salt).toString(encBase64);
+    const hashCalculated = SHA256(data.password + user.salt).toString(
+        encBase64
+    );
 
     // Si c'est KO, erreur
     if (hashCalculated !== user.hash) {
@@ -108,7 +112,7 @@ const login = async data => {
     };
 };
 
-const getOne = async data => {
+const getOne = async (data) => {
     // Si l'id n'a pas été fourni ou s'il n'est pas au format mongoose
     if (!data.id || !mongoose.isValidObjectId(data.id)) {
         const error = new Error('Invalid or missing user id');

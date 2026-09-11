@@ -8,14 +8,17 @@ const convertToBase64 = require('../utils/convertToBase64');
 
 // Dans ce service, la validation des données se fait manuellement, comparé à user service qui utilise le package Joi
 
-const publish = async data => {
+const publish = async (data) => {
     if (data.body.title === undefined || data.body.title.trim() === '') {
         const error = new Error('Title is mandatory');
         error.status = 400;
         throw error;
     }
 
-    if (data.body.description === undefined || data.body.description.trim() === '') {
+    if (
+        data.body.description === undefined ||
+        data.body.description.trim() === ''
+    ) {
         const error = new Error('Description is mandatory');
         error.status = 400;
         throw error;
@@ -48,7 +51,9 @@ const publish = async data => {
 
     if (data.files) {
         if (!data.files.picture) {
-            const error = new Error('Picture file must be sent using a param named "picture"');
+            const error = new Error(
+                'Picture file must be sent using a param named "picture"'
+            );
             error.status = 400;
             throw error;
         }
@@ -105,7 +110,7 @@ const publish = async data => {
     return newOffer;
 };
 
-const update = async data => {
+const update = async (data) => {
     // data.id est une chaîne vide
     if (data.id.trim() === '') {
         const error = new Error('Offer id is mandatory');
@@ -126,7 +131,10 @@ const update = async data => {
         throw error;
     }
 
-    if (data.body.description === undefined || data.body.description.trim() === '') {
+    if (
+        data.body.description === undefined ||
+        data.body.description.trim() === ''
+    ) {
         const error = new Error('Description is mandatory');
         error.status = 400;
         throw error;
@@ -173,7 +181,9 @@ const update = async data => {
 
     if (data.files) {
         if (!data.files.picture) {
-            const error = new Error('Picture file must be sent using a param named "picture"');
+            const error = new Error(
+                'Picture file must be sent using a param named "picture"'
+            );
             error.status = 400;
             throw error;
         }
@@ -220,7 +230,10 @@ const update = async data => {
     let updatedOffer;
 
     try {
-        updatedOffer = await Offer.findByIdAndUpdate(data.id, updateData, { new: true, runValidators: true });
+        updatedOffer = await Offer.findByIdAndUpdate(data.id, updateData, {
+            new: true,
+            runValidators: true,
+        });
     } catch (error) {
         if (cloudinaryResponse && cloudinaryResponse.public_id) {
             await cloudinary.uploader.destroy(cloudinaryResponse.public_id);
@@ -253,13 +266,15 @@ const update = async data => {
 
     // Si tout s'est bien passé, on supprime l'ancienne image
     if (cloudinaryResponse && offerToUpdate.product_image.public_id) {
-        await cloudinary.uploader.destroy(offerToUpdate.product_image.public_id);
+        await cloudinary.uploader.destroy(
+            offerToUpdate.product_image.public_id
+        );
     }
 
     return updatedOfferToReturn;
 };
 
-const remove = async data => {
+const remove = async (data) => {
     // data ou data.id falsy (absent, null, chaîne vide...)
     if (!data || !data.id || String(data.id).trim() === '') {
         const error = new Error('Offer id is mandatory');
@@ -293,7 +308,10 @@ const remove = async data => {
 
     let removedOffer;
 
-    removedOffer = await Offer.findByIdAndDelete(data.id).populate('owner', '_id account');
+    removedOffer = await Offer.findByIdAndDelete(data.id).populate(
+        'owner',
+        '_id account'
+    );
 
     // S'il y a une erreur dans findByIdAndDelete, il renvoie un élément vide
     // Dans ce cas, lever une exception
@@ -306,10 +324,17 @@ const remove = async data => {
     // Si tout s'est bien passé, on supprime les images du dossier et le dossier lui-même dans Cloudinary
     if (removedOffer.product_image.public_id) {
         try {
-            await cloudinary.uploader.destroy(removedOffer.product_image.public_id);
-            await cloudinary.api.delete_folder(`vinted/offers/${removedOffer._id}`);
+            await cloudinary.uploader.destroy(
+                removedOffer.product_image.public_id
+            );
+            await cloudinary.api.delete_folder(
+                `vinted/offers/${removedOffer._id}`
+            );
         } catch (error) {
-            console.error('Cloudinary cleanup failed:', error.error?.message || error.message || error);
+            console.error(
+                'Cloudinary cleanup failed:',
+                error.error?.message || error.message || error
+            );
         }
     }
 
@@ -326,7 +351,7 @@ const remove = async data => {
     };
 };
 
-const getAll = async data => {
+const getAll = async (data) => {
     const filters = {};
 
     // Filtre title
@@ -339,7 +364,12 @@ const getAll = async data => {
     const max = data.priceMax === undefined ? undefined : Number(data.priceMax);
 
     // si priceMin ou priceMax ne sont pas des nombres strictement positifs
-    if ((data.priceMin !== undefined && !Number.isFinite(min)) || (Number.isFinite(min) && min < 0) || (data.priceMax !== undefined && !Number.isFinite(max)) || (Number.isFinite(max) && max < 0)) {
+    if (
+        (data.priceMin !== undefined && !Number.isFinite(min)) ||
+        (Number.isFinite(min) && min < 0) ||
+        (data.priceMax !== undefined && !Number.isFinite(max)) ||
+        (Number.isFinite(max) && max < 0)
+    ) {
         const error = new Error('Invalid price filter');
         error.status = 400;
         throw error;
@@ -381,7 +411,11 @@ const getAll = async data => {
     sort = sort.replace('price-', '');
 
     // Récupération des offres correspondant aux filtres et à la page demandés
-    const offers = await Offer.find(filters).populate('owner', '_id account').sort({ product_price: sort }).limit(nbOffersPerPage).skip(nbOffersToSkip);
+    const offers = await Offer.find(filters)
+        .populate('owner', '_id account')
+        .sort({ product_price: sort })
+        .limit(nbOffersPerPage)
+        .skip(nbOffersToSkip);
 
     // Nombre de documents correspondant aux filtres
     const count = await Offer.countDocuments(filters);
@@ -389,7 +423,7 @@ const getAll = async data => {
     return { count, offers };
 };
 
-const getOne = async data => {
+const getOne = async (data) => {
     // data ou data.id falsy (absent, null, chaîne vide...)
     if (!data || !data.id || String(data.id).trim() === '') {
         const error = new Error('Offer id is mandatory');
@@ -404,7 +438,10 @@ const getOne = async data => {
         throw error;
     }
 
-    const offer = await Offer.findById(data.id).populate('owner', '_id account');
+    const offer = await Offer.findById(data.id).populate(
+        'owner',
+        '_id account'
+    );
 
     // data.id valide au format MongoDB mais offre inexistante
     if (!offer) {

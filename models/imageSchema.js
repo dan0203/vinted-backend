@@ -25,7 +25,7 @@ const imageSchema = new Schema(
         access_mode: String,
         original_filename: String,
     },
-    { _id: false },
+    { _id: false }
 );
 
 module.exports = imageSchema;
