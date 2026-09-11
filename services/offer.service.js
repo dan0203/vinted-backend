@@ -210,10 +210,10 @@ const update = async (data) => {
                 TAILLE: data.body.size,
             },
             {
-                ÉTAT: data.body.condition,
+                COULEUR: data.body.color,
             },
             {
-                COULEUR: data.body.color,
+                ÉTAT: data.body.condition,
             },
             {
                 EMPLACEMENT: data.body.city,
