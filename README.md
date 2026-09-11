@@ -39,16 +39,16 @@ No demo is currently deployed; see [Getting started](#getting-started) to run it
 
 ## Tech stack
 
-| Category | Choice |
-|---|---|
-| Runtime / framework | Node.js, Express 5 (routing, middleware) |
-| Database / ODM | MongoDB, Mongoose |
-| Validation | [Joi](https://joi.dev/) (schema validation, `user` routes) + manual validation (`offer` routes) |
-| Auth | Custom Bearer-token auth, [bcryptjs](https://github.com/dcodeIO/bcrypt.js) for password hashing, `uid2` for token/salt generation |
-| File upload | [express-fileupload](https://github.com/richardgirges/express-fileupload) + [Cloudinary](https://cloudinary.com/) for image hosting |
-| Tooling | ESLint + Prettier, GitHub Actions CI (lint on every push/PR) |
+| Category            | Choice                                                                                                                              |
+| ------------------- | ----------------------------------------------------------------------------------------------------------------------------------- |
+| Runtime / framework | Node.js, Express 5 (routing, middleware)                                                                                            |
+| Database / ODM      | MongoDB, Mongoose                                                                                                                   |
+| Validation          | [Joi](https://joi.dev/) (schema validation, `user` routes) + manual validation (`offer` routes)                                     |
+| Auth                | Custom Bearer-token auth, [bcryptjs](https://github.com/dcodeIO/bcrypt.js) for password hashing, `uid2` for token/salt generation   |
+| File upload         | [express-fileupload](https://github.com/richardgirges/express-fileupload) + [Cloudinary](https://cloudinary.com/) for image hosting |
+| Tooling             | ESLint + Prettier, GitHub Actions CI (lint on every push/PR)                                                                        |
 
-*(Utility packages like `cors` and `dotenv` are used for standard config/CORS handling and aren't listed as architectural choices.)*
+_(Utility packages like `cors` and `dotenv` are used for standard config/CORS handling and aren't listed as architectural choices.)_
 
 ## API reference
 
@@ -56,16 +56,16 @@ Base URL: `http://localhost:3000` (or your configured `PORT`). All request/respo
 
 Authenticated routes expect an `Authorization: Bearer <token>` header, using the token returned by signup/login.
 
-| Method | Route | Auth | Description |
-|---|---|---|---|
-| POST | `/user/signup` | — | Create an account. Body: `email`, `password` (min 6 chars), `username`, `newsletter` (optional). |
-| POST | `/user/login` | — | Log in. Body: `email`, `password`. |
-| GET | `/user/:id` | — | Get a user's public profile (`_id`, `account.username`, `account.avatar`, `newsletter`). |
-| POST | `/offers/publish` | ✅ | Publish a new offer. `multipart/form-data`: `title`, `description`, `price`, `brand`, `size`, `color`, `condition`, `city`, and an optional `picture` file. |
-| GET | `/offers` | — | List offers. Query params: `title`, `priceMin`, `priceMax`, `sort` (`price-asc` \| `price-desc`, default ascending), `page` (default 1, 20 per page). |
-| GET | `/offers/:id` | — | Get a single offer. |
-| PUT | `/offers/:id` | ✅ (owner only) | Update an offer. Same body as `publish` — the endpoint expects the full set of fields, not a partial update (see [Known limitations](#known-limitations--roadmap)). |
-| DELETE | `/offers/:id` | ✅ (owner only) | Delete an offer and its Cloudinary image. |
+| Method | Route             | Auth            | Description                                                                                                                                                         |
+| ------ | ----------------- | --------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| POST   | `/user/signup`    | —               | Create an account. Body: `email`, `password` (min 6 chars), `username`, `newsletter` (optional).                                                                    |
+| POST   | `/user/login`     | —               | Log in. Body: `email`, `password`.                                                                                                                                  |
+| GET    | `/user/:id`       | —               | Get a user's public profile (`_id`, `account.username`, `account.avatar`, `newsletter`).                                                                            |
+| POST   | `/offers/publish` | ✅              | Publish a new offer. `multipart/form-data`: `title`, `description`, `price`, `brand`, `size`, `color`, `condition`, `city`, and an optional `picture` file.         |
+| GET    | `/offers`         | —               | List offers. Query params: `title`, `priceMin`, `priceMax`, `sort` (`price-asc` \| `price-desc`, default ascending), `page` (default 1, 20 per page).               |
+| GET    | `/offers/:id`     | —               | Get a single offer.                                                                                                                                                 |
+| PUT    | `/offers/:id`     | ✅ (owner only) | Update an offer. Same body as `publish` — the endpoint expects the full set of fields, not a partial update (see [Known limitations](#known-limitations--roadmap)). |
+| DELETE | `/offers/:id`     | ✅ (owner only) | Delete an offer and its Cloudinary image.                                                                                                                           |
 
 ### Examples
 
@@ -79,9 +79,9 @@ curl -X POST http://localhost:3000/user/signup \
 
 ```json
 {
-  "_id": "66f1a2b3c4d5e6f7a8b9c0d1",
-  "token": "aB3dE5fG7hJ9kL1mN2pQrStUvW",
-  "account": { "username": "jane" }
+    "_id": "66f1a2b3c4d5e6f7a8b9c0d1",
+    "token": "aB3dE5fG7hJ9kL1mN2pQrStUvW",
+    "account": { "username": "jane" }
 }
 ```
 
@@ -109,20 +109,23 @@ curl "http://localhost:3000/offers?title=jacket&priceMin=10&priceMax=50&sort=pri
 
 ```json
 {
-  "count": 1,
-  "offers": [
-    {
-      "_id": "66f1a2b3c4d5e6f7a8b9c0d2",
-      "product_name": "Vintage denim jacket",
-      "product_price": 25,
-      "product_details": [
-        { "MARQUE": "Levi's" }, { "TAILLE": "M" },
-        { "COULEUR": "Blue" }, { "ÉTAT": "Good" }, { "EMPLACEMENT": "Paris" }
-      ],
-      "product_image": { "secure_url": "https://res.cloudinary.com/..." },
-      "owner": { "_id": "...", "account": { "username": "jane" } }
-    }
-  ]
+    "count": 1,
+    "offers": [
+        {
+            "_id": "66f1a2b3c4d5e6f7a8b9c0d2",
+            "product_name": "Vintage denim jacket",
+            "product_price": 25,
+            "product_details": [
+                { "MARQUE": "Levi's" },
+                { "TAILLE": "M" },
+                { "COULEUR": "Blue" },
+                { "ÉTAT": "Good" },
+                { "EMPLACEMENT": "Paris" }
+            ],
+            "product_image": { "secure_url": "https://res.cloudinary.com/..." },
+            "owner": { "_id": "...", "account": { "username": "jane" } }
+        }
+    ]
 }
 ```
 
@@ -149,13 +152,13 @@ The server connects to MongoDB and Cloudinary on startup and refuses to start if
 
 ### Environment variables
 
-| Variable | Description |
-|---|---|
-| `MONGODB_URI` | MongoDB connection string (cluster only — the `vinted` database name is set in code via Mongoose's `dbName` option, so don't include a database name or trailing slash in the URI). |
-| `CLOUDINARY_CLOUD_NAME` | From your Cloudinary dashboard. |
-| `CLOUDINARY_API_KEY` | From your Cloudinary dashboard. |
-| `CLOUDINARY_API_SECRET` | From your Cloudinary dashboard — keep this secret, never commit it. |
-| `PORT` | Optional, defaults to `3000`. |
+| Variable                | Description                                                                                                                                                                         |
+| ----------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `MONGODB_URI`           | MongoDB connection string (cluster only — the `vinted` database name is set in code via Mongoose's `dbName` option, so don't include a database name or trailing slash in the URI). |
+| `CLOUDINARY_CLOUD_NAME` | From your Cloudinary dashboard.                                                                                                                                                     |
+| `CLOUDINARY_API_KEY`    | From your Cloudinary dashboard.                                                                                                                                                     |
+| `CLOUDINARY_API_SECRET` | From your Cloudinary dashboard — keep this secret, never commit it.                                                                                                                 |
+| `PORT`                  | Optional, defaults to `3000`.                                                                                                                                                       |
 
 `.env` is git-ignored; `.env.example` documents the variable names. If you ever deploy this API (Render, Railway, etc.), set these same variables in that platform's environment/secrets settings — there's nothing framework-specific to prefix them with here, since this is a plain Node/Express backend using `dotenv` (unlike a Vite or Create React App frontend, which requires a `VITE_`/`REACT_APP_` prefix for a variable to be exposed to the browser).
 
@@ -173,7 +176,7 @@ The server connects to MongoDB and Cloudinary on startup and refuses to start if
 
 - **PUT vs PATCH**: `update` currently requires the full set of fields, matching a frontend that always submits a complete, pre-filled form (the case here). If a future client needs to change a single field (e.g. just the price) without resubmitting the whole form, this endpoint should move to `PATCH` with partial-update semantics.
 - **CORS / payload size**: `cors()` currently accepts any origin, and `express.json()` has no explicit payload size limit. That's fine for a demo/portfolio project, but a production deployment should restrict CORS to specific origins and cap request body size.
-- **No automated tests yet**: the `test` script in `package.json` is still a placeholder. Supertest coverage for the auth and offers routes is the planned next step.
+- **Test coverage is partial**: a Jest/Supertest suite (20 tests) covers the `user` and `offers` routes — signup/login, ownership checks, filtering, validation errors — using an isolated in-memory MongoDB instance (`mongodb-memory-server`), no shared test database involved. Not yet covered: Cloudinary upload itself (tests exercise `publish`/`update` without attaching a picture) and the update (`PUT`) flow.
 - **No explicit MongoDB indexes** on `product_name` or `product_price`, which are used for search and sorting — fine at this scale, but worth adding as the dataset grows.
 - **Single image per offer**: the schema has a `product_pictures` array meant for multiple images, but it's currently always saved empty — only the single `product_image` field is populated. Multi-image upload isn't implemented yet.
 
