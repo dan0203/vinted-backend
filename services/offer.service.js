@@ -309,7 +309,7 @@ const remove = async data => {
             await cloudinary.uploader.destroy(removedOffer.product_image.public_id);
             await cloudinary.api.delete_folder(`vinted/offers/${removedOffer._id}`);
         } catch (error) {
-            console.error('Cloudinary cleanup failed:', error.message);
+            console.error('Cloudinary cleanup failed:', error.error?.message || error.message || error);
         }
     }
 
