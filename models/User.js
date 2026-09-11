@@ -9,7 +9,6 @@ const userSchema = new Schema({
         avatar: imageSchema,
     },
     newsletter: Boolean,
-    salt: { type: String, required: true },
     hash: { type: String, required: true },
     token: { type: String, required: true },
 });

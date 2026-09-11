@@ -4,8 +4,7 @@ const Joi = require('joi');
 // Model
 const User = require('../models/User');
 // Encryption
-const SHA256 = require('crypto-js/sha256');
-const encBase64 = require('crypto-js/enc-base64');
+const bcrypt = require('bcryptjs');
 const uid2 = require('uid2');
 // Utils
 const throwError = require('../utils/throwError');
@@ -39,10 +38,9 @@ const signup = async (data) => {
     }
 
     // Si les informations fournies sont validées,
-    //  on crée les éléments manquants (salt, hash, token)
+    //  on crée les éléments manquants (hash, token)
     //  et on enregistre le newUser dans la bdd
-    const salt = uid2(16);
-    const hash = SHA256(data.password + salt).toString(encBase64);
+    const hash = await bcrypt.hash(data.password, 10);
     const token = uid2(16);
 
     const newUser = new User({
@@ -51,7 +49,6 @@ const signup = async (data) => {
             username: data.username,
         },
         newsletter: data.newsletter,
-        salt,
         hash,
         token,
     });
@@ -83,12 +80,10 @@ const login = async (data) => {
     }
 
     // S'il existe, tester la crypto
-    const hashCalculated = SHA256(data.password + user.salt).toString(
-        encBase64
-    );
+    const isPasswordValid = await bcrypt.compare(data.password, user.hash);
 
     // Si c'est KO, erreur
-    if (hashCalculated !== user.hash) {
+    if (!isPasswordValid) {
         throwError('Unauthorized', 403);
     }
 
