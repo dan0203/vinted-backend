@@ -58,9 +58,9 @@ Authenticated routes expect an `Authorization: Bearer <token>` header, using the
 
 | Method | Route             | Auth            | Description                                                                                                                                                         |
 | ------ | ----------------- | --------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| POST   | `/user/signup`    | —               | Create an account. Body: `email`, `password` (min 6 chars), `username`, `newsletter` (optional).                                                                    |
-| POST   | `/user/login`     | —               | Log in. Body: `email`, `password`.                                                                                                                                  |
-| GET    | `/user/:id`       | —               | Get a user's public profile (`_id`, `account.username`, `account.avatar`, `newsletter`).                                                                            |
+| POST   | `/users/signup`   | —               | Create an account. Body: `email`, `password` (min 6 chars), `username`, `newsletter` (optional).                                                                    |
+| POST   | `/users/login`    | —               | Log in. Body: `email`, `password`.                                                                                                                                  |
+| GET    | `/users/:id`      | —               | Get a user's public profile (`_id`, `account.username`, `account.avatar`, `newsletter`).                                                                            |
 | POST   | `/offers/publish` | ✅              | Publish a new offer. `multipart/form-data`: `title`, `description`, `price`, `brand`, `size`, `color`, `condition`, `city`, and an optional `picture` file.         |
 | GET    | `/offers`         | —               | List offers. Query params: `title`, `priceMin`, `priceMax`, `sort` (`price-asc` \| `price-desc`, default ascending), `page` (default 1, 20 per page).               |
 | GET    | `/offers/:id`     | —               | Get a single offer.                                                                                                                                                 |
@@ -72,7 +72,7 @@ Authenticated routes expect an `Authorization: Bearer <token>` header, using the
 Signup:
 
 ```bash
-curl -X POST http://localhost:3000/user/signup \
+curl -X POST http://localhost:3000/users/signup \
   -H "Content-Type: application/json" \
   -d '{"email":"jane@example.com","password":"secret123","username":"jane"}'
 ```
@@ -186,7 +186,7 @@ The server connects to MongoDB and Cloudinary on startup and refuses to start if
 
 ## Related project
 
-[vinted-frontend](https://github.com/dan0203/vinted-frontend) is a React client built against this exact API contract (`/user/*`, `/offers/*`) — note that its checkout step calls Le Réacteur's shared payment endpoint directly rather than this backend, so the payment flow isn't self-contained end-to-end.
+[vinted-frontend](https://github.com/dan0203/vinted-frontend) is a React client built against this exact API contract (`/users/*`, `/offers/*`) — note that its checkout step calls Le Réacteur's shared payment endpoint directly rather than this backend, so the payment flow isn't self-contained end-to-end.
 
 ## License
 

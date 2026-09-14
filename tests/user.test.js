@@ -14,9 +14,9 @@ afterAll(async () => {
     await closeDatabase();
 });
 
-describe('POST /user/signup', () => {
+describe('POST /users/signup', () => {
     it('creates an account with valid data', async () => {
-        const response = await request(app).post('/user/signup').send({
+        const response = await request(app).post('/users/signup').send({
             email: 'jane@example.com',
             password: 'secret123',
             username: 'jane',
@@ -29,7 +29,7 @@ describe('POST /user/signup', () => {
 
     // Ce test ne touche jamais la base : Joi rejette la requête avant tout accès Mongo
     it('rejects a missing email', async () => {
-        const response = await request(app).post('/user/signup').send({
+        const response = await request(app).post('/users/signup').send({
             password: 'secret123',
             username: 'jane',
         });
@@ -39,13 +39,13 @@ describe('POST /user/signup', () => {
     });
 
     it('rejects a duplicate email', async () => {
-        await request(app).post('/user/signup').send({
+        await request(app).post('/users/signup').send({
             email: 'jane@example.com',
             password: 'secret123',
             username: 'jane',
         });
 
-        const response = await request(app).post('/user/signup').send({
+        const response = await request(app).post('/users/signup').send({
             email: 'jane@example.com',
             password: 'otherPass1',
             username: 'jane2',
@@ -55,9 +55,9 @@ describe('POST /user/signup', () => {
     });
 });
 
-describe('POST /user/login', () => {
+describe('POST /users/login', () => {
     beforeEach(async () => {
-        await request(app).post('/user/signup').send({
+        await request(app).post('/users/signup').send({
             email: 'jane@example.com',
             password: 'secret123',
             username: 'jane',
@@ -65,7 +65,7 @@ describe('POST /user/login', () => {
     });
 
     it('logs in with correct credentials', async () => {
-        const response = await request(app).post('/user/login').send({
+        const response = await request(app).post('/users/login').send({
             email: 'jane@example.com',
             password: 'secret123',
         });
@@ -75,7 +75,7 @@ describe('POST /user/login', () => {
     });
 
     it('rejects a wrong password', async () => {
-        const response = await request(app).post('/user/login').send({
+        const response = await request(app).post('/users/login').send({
             email: 'jane@example.com',
             password: 'wrongPassword',
         });
@@ -84,7 +84,7 @@ describe('POST /user/login', () => {
     });
 
     it('rejects an unknown email', async () => {
-        const response = await request(app).post('/user/login').send({
+        const response = await request(app).post('/users/login').send({
             email: 'unknown@example.com',
             password: 'secret123',
         });

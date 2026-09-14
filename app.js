@@ -19,7 +19,7 @@ app.use(cors());
 app.use(express.json());
 
 // Routes
-app.use('/user', userRoutes); // Ajoute automatiquement /user devant les routes importées depuis ./routes/user.js pour éviter de le saisir dans chaque route
+app.use('/users', userRoutes); // Ajoute automatiquement /users devant les routes importées depuis ./routes/user.js pour éviter de le saisir dans chaque route
 app.use('/offers', offerRoutes);
 app.all(/.*/, (req, res) => {
     res.status(404).json({ message: 'The route does not exist' });

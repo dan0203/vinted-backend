@@ -5,8 +5,8 @@ const request = require('supertest');
 const app = require('../app');
 
 describe('validation without a database connection', () => {
-    it('POST /user/signup rejects a missing email (Joi)', async () => {
-        const response = await request(app).post('/user/signup').send({
+    it('POST /users/signup rejects a missing email (Joi)', async () => {
+        const response = await request(app).post('/users/signup').send({
             password: 'secret123',
             username: 'jane',
         });
@@ -15,8 +15,8 @@ describe('validation without a database connection', () => {
         expect(response.body.message).toMatch(/email/i);
     });
 
-    it('POST /user/login rejects a missing password (Joi)', async () => {
-        const response = await request(app).post('/user/login').send({
+    it('POST /users/login rejects a missing password (Joi)', async () => {
+        const response = await request(app).post('/users/login').send({
             email: 'jane@example.com',
         });
 

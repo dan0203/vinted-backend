@@ -58,9 +58,9 @@ Les routes authentifiées attendent un header `Authorization: Bearer <token>`, a
 
 | Méthode | Route             | Auth                         | Description                                                                                                                                                                                       |
 | ------- | ----------------- | ---------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| POST    | `/user/signup`    | —                            | Créer un compte. Corps : `email`, `password` (6 caractères min.), `username`, `newsletter` (optionnel).                                                                                           |
-| POST    | `/user/login`     | —                            | Se connecter. Corps : `email`, `password`.                                                                                                                                                        |
-| GET     | `/user/:id`       | —                            | Récupérer le profil public d'un utilisateur (`_id`, `account.username`, `account.avatar`, `newsletter`).                                                                                          |
+| POST    | `/users/signup`   | —                            | Créer un compte. Corps : `email`, `password` (6 caractères min.), `username`, `newsletter` (optionnel).                                                                                           |
+| POST    | `/users/login`    | —                            | Se connecter. Corps : `email`, `password`.                                                                                                                                                        |
+| GET     | `/users/:id`      | —                            | Récupérer le profil public d'un utilisateur (`_id`, `account.username`, `account.avatar`, `newsletter`).                                                                                          |
 | POST    | `/offers/publish` | ✅                           | Publier une annonce. `multipart/form-data` : `title`, `description`, `price`, `brand`, `size`, `color`, `condition`, `city`, et un fichier `picture` optionnel.                                   |
 | GET     | `/offers`         | —                            | Lister les annonces. Paramètres de requête : `title`, `priceMin`, `priceMax`, `sort` (`price-asc` \| `price-desc`, croissant par défaut), `page` (défaut 1, 20 par page).                         |
 | GET     | `/offers/:id`     | —                            | Récupérer une annonce.                                                                                                                                                                            |
@@ -72,7 +72,7 @@ Les routes authentifiées attendent un header `Authorization: Bearer <token>`, a
 Inscription :
 
 ```bash
-curl -X POST http://localhost:3000/user/signup \
+curl -X POST http://localhost:3000/users/signup \
   -H "Content-Type: application/json" \
   -d '{"email":"jane@example.com","password":"secret123","username":"jane"}'
 ```
@@ -186,7 +186,7 @@ Le serveur se connecte à MongoDB et à Cloudinary au démarrage, et refuse de d
 
 ## Projet lié
 
-[vinted-frontend](https://github.com/dan0203/vinted-frontend) est un client React construit sur ce même contrat d'API (`/user/*`, `/offers/*`) — à noter que son étape de paiement appelle directement l'endpoint de paiement partagé du Réacteur plutôt que ce backend, donc le flux de paiement n'est pas autoporté de bout en bout.
+[vinted-frontend](https://github.com/dan0203/vinted-frontend) est un client React construit sur ce même contrat d'API (`/users/*`, `/offers/*`) — à noter que son étape de paiement appelle directement l'endpoint de paiement partagé du Réacteur plutôt que ce backend, donc le flux de paiement n'est pas autoporté de bout en bout.
 
 ## Licence
 

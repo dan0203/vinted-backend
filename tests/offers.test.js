@@ -9,7 +9,7 @@ beforeAll(async () => {
 });
 
 beforeEach(async () => {
-    const signupResponse = await request(app).post('/user/signup').send({
+    const signupResponse = await request(app).post('/users/signup').send({
         email: 'seller@example.com',
         password: 'secret123',
         username: 'seller',
@@ -138,7 +138,7 @@ describe('PATCH /offers/:id', () => {
     });
 
     it('refuses an update by a user who is not the owner', async () => {
-        const otherSignup = await request(app).post('/user/signup').send({
+        const otherSignup = await request(app).post('/users/signup').send({
             email: 'other@example.com',
             password: 'secret123',
             username: 'other',
@@ -204,7 +204,7 @@ describe('DELETE /offers/:id', () => {
     });
 
     it('refuses deletion by a user who is not the owner', async () => {
-        const otherSignup = await request(app).post('/user/signup').send({
+        const otherSignup = await request(app).post('/users/signup').send({
             email: 'other@example.com',
             password: 'secret123',
             username: 'other',
