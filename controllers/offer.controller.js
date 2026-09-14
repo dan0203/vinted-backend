@@ -36,6 +36,23 @@ const update = async (req, res, next) => {
     }
 };
 
+const updatePartial = async (req, res, next) => {
+    try {
+        const data = {
+            body: req.body,
+            files: req.files,
+            id: req.params.id,
+            user: req.user,
+        };
+
+        const updatedOffer = await offerService.updatePartial(data);
+
+        return res.status(200).json(updatedOffer);
+    } catch (error) {
+        next(error);
+    }
+};
+
 const remove = async (req, res, next) => {
     try {
         const data = {
@@ -75,4 +92,4 @@ const getOne = async (req, res, next) => {
     }
 };
 
-module.exports = { getAll, publish, update, remove, getOne };
+module.exports = { getAll, publish, update, updatePartial, remove, getOne };

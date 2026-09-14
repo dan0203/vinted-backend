@@ -110,6 +110,86 @@ describe('GET /offers/:id', () => {
     });
 });
 
+describe('PATCH /offers/:id', () => {
+    let offerId;
+
+    beforeEach(async () => {
+        const publishResponse = await request(app)
+            .post('/offers/publish')
+            .set('Authorization', `Bearer ${token}`)
+            .field('title', 'Vintage jacket')
+            .field('description', 'Good condition, worn a few times')
+            .field('price', '25')
+            .field('brand', "Levi's")
+            .field('size', 'M')
+            .field('color', 'Blue')
+            .field('condition', 'Good')
+            .field('city', 'Paris');
+        offerId = publishResponse.body._id;
+    });
+
+    // Pas de DB touchée : isAuthenticated renvoie 401 avant même d'aller vérifier le token en base
+    it('requires authentication', async () => {
+        const response = await request(app)
+            .patch(`/offers/${offerId}`)
+            .field('price', '30');
+
+        expect(response.status).toBe(401);
+    });
+
+    it('refuses an update by a user who is not the owner', async () => {
+        const otherSignup = await request(app).post('/user/signup').send({
+            email: 'other@example.com',
+            password: 'secret123',
+            username: 'other',
+        });
+
+        const response = await request(app)
+            .patch(`/offers/${offerId}`)
+            .set('Authorization', `Bearer ${otherSignup.body.token}`)
+            .field('price', '30');
+
+        expect(response.status).toBe(403);
+    });
+
+    it('returns 404 for a well-formed but non-existent id', async () => {
+        const response = await request(app)
+            .patch('/offers/507f1f77bcf86cd799439011')
+            .set('Authorization', `Bearer ${token}`)
+            .field('price', '30');
+
+        expect(response.status).toBe(404);
+    });
+
+    it('updates a single top-level field without touching the others', async () => {
+        const response = await request(app)
+            .patch(`/offers/${offerId}`)
+            .set('Authorization', `Bearer ${token}`)
+            .field('price', '30');
+
+        expect(response.status).toBe(200);
+        expect(response.body.product_price).toBe(30);
+        expect(response.body.product_name).toBe('Vintage jacket');
+    });
+
+    it('merges a single product_details field instead of replacing the whole array', async () => {
+        const response = await request(app)
+            .patch(`/offers/${offerId}`)
+            .set('Authorization', `Bearer ${token}`)
+            .field('brand', 'Nike');
+
+        expect(response.status).toBe(200);
+
+        const details = Object.assign({}, ...response.body.product_details);
+        expect(details.MARQUE).toBe('Nike');
+        // Les autres détails, non envoyés dans ce PATCH, doivent être préservés
+        expect(details.TAILLE).toBe('M');
+        expect(details.COULEUR).toBe('Blue');
+        expect(details.ÉTAT).toBe('Good');
+        expect(details.EMPLACEMENT).toBe('Paris');
+    });
+});
+
 describe('DELETE /offers/:id', () => {
     let offerId;
 

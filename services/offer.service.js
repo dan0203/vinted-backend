@@ -244,6 +244,176 @@ const update = async (data) => {
     return updatedOfferToReturn;
 };
 
+const updatePartial = async (data) => {
+    // data.id est une chaîne vide
+    if (data.id.trim() === '') {
+        throwError('Offer id is mandatory', 400);
+    }
+
+    // data.id au mauvais format
+    if (!mongoose.Types.ObjectId.isValid(data.id)) {
+        throwError('Invalid offer id', 400);
+    }
+
+    // Vérifier que l'offre existe
+    const offerToUpdate = await Offer.findById(data.id);
+
+    // Pas d'offre existante
+    if (!offerToUpdate) {
+        throwError('Offer does not exist', 404);
+    }
+
+    // L'offre n'appartient pas au user connecté
+    if (!data.user._id.equals(offerToUpdate.owner._id)) {
+        throwError('Unauthorized', 403);
+    }
+
+    const hasBody =
+        data.body !== undefined &&
+        ((data.body.title !== undefined && data.body.title.trim() !== '') ||
+            (data.body.description !== undefined &&
+                data.body.description.trim() !== '') ||
+            (data.body.price !== undefined && data.body.price.trim() !== '') ||
+            (data.body.brand !== undefined && data.body.brand.trim() !== '') ||
+            (data.body.size !== undefined && data.body.size.trim() !== '') ||
+            (data.body.color !== undefined && data.body.color.trim() !== '') ||
+            (data.body.condition !== undefined &&
+                data.body.condition.trim() !== '') ||
+            (data.body.city !== undefined && data.body.city.trim() !== ''));
+
+    const hasFiles = !!data.files;
+
+    if (!hasBody && !hasFiles) {
+        throwError('No data was sent', 400);
+    }
+
+    const updateFields = {};
+
+    if (hasBody) {
+        let price;
+
+        if (data.body.price !== undefined && data.body.price.trim() !== '') {
+            price = Number(data.body.price);
+
+            if (!Number.isFinite(price)) {
+                throwError('Price must be a number', 400);
+            }
+
+            if (price < 0) {
+                throwError('Price must be greater than or equal to 0', 400);
+            }
+        }
+        if (data.body.title !== undefined && data.body.title.trim() !== '')
+            updateFields.product_name = data.body.title;
+        if (
+            data.body.description !== undefined &&
+            data.body.description.trim() !== ''
+        )
+            updateFields.product_description = data.body.description;
+        if (data.body.price !== undefined && data.body.price.trim() !== '')
+            updateFields.product_price = data.body.price;
+
+        const product_details = [...offerToUpdate.product_details];
+
+        const fieldToKey = {
+            brand: 'MARQUE',
+            size: 'TAILLE',
+            color: 'COULEUR',
+            condition: 'ÉTAT',
+            city: 'EMPLACEMENT',
+        };
+
+        const upsertDetail = (details, key, value) => {
+            const index = details.findIndex((d) => key in d);
+            if (index !== -1) {
+                details[index] = { [key]: value };
+            } else {
+                details.push({ [key]: value });
+            }
+        };
+
+        let hasChangedProductDetails = false;
+
+        Object.keys(fieldToKey).forEach((key) => {
+            if (data.body[key] !== undefined && data.body[key].trim() !== '') {
+                upsertDetail(product_details, fieldToKey[key], data.body[key]);
+                hasChangedProductDetails = true;
+            }
+        });
+
+        if (hasChangedProductDetails)
+            updateFields.product_details = product_details;
+    }
+
+    let cloudinaryResponse;
+    if (hasFiles) {
+        const folderPath = `vinted/offers/${data.id}`;
+
+        if (!data.files.picture) {
+            throwError(
+                'Picture file must be sent using a param named "picture"',
+                400
+            );
+        }
+
+        // Transforme mon image de Buffer à String
+        const base64Image = convertToBase64(data.files.picture);
+
+        // On fait une requête à cloudinary pour qu'il héberge l'image
+        cloudinaryResponse = await cloudinary.uploader.upload(base64Image, {
+            // dans un sous-dossier correspondant à l'id de l'offre
+            asset_folder: folderPath,
+        });
+
+        if (cloudinaryResponse) {
+            updateFields.product_image = cloudinaryResponse;
+        }
+    }
+
+    let updatedOffer;
+    try {
+        updatedOffer = await Offer.findByIdAndUpdate(data.id, updateFields, {
+            new: true,
+            runValidators: true,
+        });
+
+        // S'il y a une erreur dans findByIdAndUpdate, il renvoie un élément vide
+        // Dans ce cas, supprimer l'image que l'on vient d'uploader et lever une exception
+        if (!updatedOffer) {
+            throwError('Failed to update offer', 500);
+        }
+    } catch (error) {
+        if (cloudinaryResponse !== undefined && cloudinaryResponse.public_id) {
+            await cloudinary.uploader.destroy(cloudinaryResponse.public_id);
+        }
+
+        throw error;
+    }
+
+    await updatedOffer.populate('owner', '_id account');
+
+    const updatedOfferToReturn = {
+        product_name: updatedOffer.product_name,
+        product_description: updatedOffer.product_description,
+        product_price: updatedOffer.product_price,
+        product_details: updatedOffer.product_details,
+        product_image: updatedOffer.product_image,
+        owner: updatedOffer.owner,
+    };
+
+    // Si tout s'est bien passé, on supprime l'ancienne image
+    if (
+        cloudinaryResponse !== undefined &&
+        offerToUpdate.product_image.public_id
+    ) {
+        await cloudinary.uploader.destroy(
+            offerToUpdate.product_image.public_id
+        );
+    }
+
+    return updatedOfferToReturn;
+};
+
 const remove = async (data) => {
     // data ou data.id falsy (absent, null, chaîne vide...)
     if (!data || !data.id || String(data.id).trim() === '') {
@@ -409,4 +579,4 @@ const getOne = async (data) => {
     };
 };
 
-module.exports = { getAll, publish, update, remove, getOne };
+module.exports = { getAll, publish, update, updatePartial, remove, getOne };
