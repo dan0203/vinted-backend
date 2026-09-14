@@ -203,7 +203,7 @@ const update = async (data) => {
 
     try {
         updatedOffer = await Offer.findByIdAndUpdate(data.id, updateData, {
-            new: true,
+            returnDocument: 'after',
             runValidators: true,
         });
     } catch (error) {
@@ -373,7 +373,7 @@ const updatePartial = async (data) => {
     let updatedOffer;
     try {
         updatedOffer = await Offer.findByIdAndUpdate(data.id, updateFields, {
-            new: true,
+            returnDocument: 'after',
             runValidators: true,
         });
 
