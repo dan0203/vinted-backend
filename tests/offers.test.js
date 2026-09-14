@@ -110,6 +110,105 @@ describe('GET /offers/:id', () => {
     });
 });
 
+// Comportements communs à PUT et PATCH /offers/:id : auth requise, refus si
+// on n'est pas propriétaire, 404 si l'offre n'existe pas. `attachFields` reçoit
+// une requête supertest déjà construite (méthode + url) et y ajoute des champs
+// valides pour que seule l'authentification/l'ownership/l'existence soit testée.
+const testsCommonToUpdateMethods = (method, getOfferId, attachFields) => {
+    // Pas de DB touchée : isAuthenticated renvoie 401 avant même d'aller vérifier le token en base
+    it('requires authentication', async () => {
+        const response = await attachFields(
+            request(app)[method](`/offers/${getOfferId()}`)
+        );
+
+        expect(response.status).toBe(401);
+    });
+
+    it('refuses an update by a user who is not the owner', async () => {
+        const otherSignup = await request(app).post('/users/signup').send({
+            email: 'other@example.com',
+            password: 'secret123',
+            username: 'other',
+        });
+
+        const response = await attachFields(
+            request(app)
+                [method](`/offers/${getOfferId()}`)
+                .set('Authorization', `Bearer ${otherSignup.body.token}`)
+        );
+
+        expect(response.status).toBe(403);
+    });
+
+    it('returns 404 for a well-formed but non-existent id', async () => {
+        const response = await attachFields(
+            request(app)
+                [method]('/offers/507f1f77bcf86cd799439011')
+                .set('Authorization', `Bearer ${token}`)
+        );
+
+        expect(response.status).toBe(404);
+    });
+};
+
+describe('PUT /offers/:id', () => {
+    let offerId;
+
+    beforeEach(async () => {
+        const publishResponse = await request(app)
+            .post('/offers/publish')
+            .set('Authorization', `Bearer ${token}`)
+            .field('title', 'Vintage jacket')
+            .field('description', 'Good condition, worn a few times')
+            .field('price', '25')
+            .field('brand', "Levi's")
+            .field('size', 'M')
+            .field('color', 'Blue')
+            .field('condition', 'Good')
+            .field('city', 'Paris');
+        offerId = publishResponse.body._id;
+    });
+
+    testsCommonToUpdateMethods(
+        'put',
+        () => offerId,
+        (req) =>
+            req
+                .field('title', 'Vintage jacket')
+                .field('description', 'Good condition, worn a few times')
+                .field('price', '30')
+    );
+
+    it('rejects a missing title', async () => {
+        const response = await request(app)
+            .put(`/offers/${offerId}`)
+            .set('Authorization', `Bearer ${token}`)
+            .field('description', 'Good condition')
+            .field('price', '30');
+
+        expect(response.status).toBe(400);
+    });
+
+    it('fully replaces the offer', async () => {
+        const response = await request(app)
+            .put(`/offers/${offerId}`)
+            .set('Authorization', `Bearer ${token}`)
+            .field('title', 'Updated jacket')
+            .field('description', 'Updated description')
+            .field('price', '40')
+            .field('brand', 'Nike');
+
+        expect(response.status).toBe(200);
+        expect(response.body.product_name).toBe('Updated jacket');
+        expect(response.body.product_price).toBe(40);
+
+        const details = Object.assign({}, ...response.body.product_details);
+        expect(details.MARQUE).toBe('Nike');
+        // PUT remplace tout product_details : les champs non envoyés ne sont pas conservés
+        expect(details.TAILLE).toBeFalsy();
+    });
+});
+
 describe('PATCH /offers/:id', () => {
     let offerId;
 
@@ -128,38 +227,11 @@ describe('PATCH /offers/:id', () => {
         offerId = publishResponse.body._id;
     });
 
-    // Pas de DB touchée : isAuthenticated renvoie 401 avant même d'aller vérifier le token en base
-    it('requires authentication', async () => {
-        const response = await request(app)
-            .patch(`/offers/${offerId}`)
-            .field('price', '30');
-
-        expect(response.status).toBe(401);
-    });
-
-    it('refuses an update by a user who is not the owner', async () => {
-        const otherSignup = await request(app).post('/users/signup').send({
-            email: 'other@example.com',
-            password: 'secret123',
-            username: 'other',
-        });
-
-        const response = await request(app)
-            .patch(`/offers/${offerId}`)
-            .set('Authorization', `Bearer ${otherSignup.body.token}`)
-            .field('price', '30');
-
-        expect(response.status).toBe(403);
-    });
-
-    it('returns 404 for a well-formed but non-existent id', async () => {
-        const response = await request(app)
-            .patch('/offers/507f1f77bcf86cd799439011')
-            .set('Authorization', `Bearer ${token}`)
-            .field('price', '30');
-
-        expect(response.status).toBe(404);
-    });
+    testsCommonToUpdateMethods(
+        'patch',
+        () => offerId,
+        (req) => req.field('price', '30')
+    );
 
     it('updates a single top-level field without touching the others', async () => {
         const response = await request(app)
