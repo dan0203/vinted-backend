@@ -1,5 +1,4 @@
 // Modules npm
-const mongoose = require('mongoose');
 const Joi = require('joi');
 // Model
 const User = require('../models/User');
@@ -8,6 +7,7 @@ const bcrypt = require('bcryptjs');
 const uid2 = require('uid2');
 // Utils
 const throwError = require('../utils/throwError');
+const assertValidObjectId = require('../utils/assertValidObjectId');
 
 // Dans ce service, la validation des données se fait grâce au package Joi, comparé à offer service où on les effectue manuellement
 
@@ -98,10 +98,7 @@ const login = async (data) => {
 };
 
 const getOne = async (data) => {
-    // Si l'id n'a pas été fourni ou s'il n'est pas au format mongoose
-    if (!data.id || !mongoose.isValidObjectId(data.id)) {
-        throwError('Invalid or missing user id', 400);
-    }
+    assertValidObjectId(data, 'User');
 
     const user = await User.findById(data.id);
 

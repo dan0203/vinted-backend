@@ -7,23 +7,12 @@ const Offer = require('../models/Offer');
 const convertToBase64 = require('../utils/convertToBase64');
 const throwError = require('../utils/throwError');
 const escapeRegex = require('../utils/escapeRegex');
+const assertValidObjectId = require('../utils/assertValidObjectId');
 
 // Dans ce service, la validation des données se fait manuellement, comparé à user service qui utilise le package Joi
 
-function assertValidOfferId(data) {
-    // data.id est une chaîne vide
-    if (data.id.trim() === '') {
-        throwError('Offer id is mandatory', 400);
-    }
-
-    // data.id au mauvais format
-    if (!mongoose.Types.ObjectId.isValid(data.id)) {
-        throwError('Invalid offer id', 400);
-    }
-}
-
 async function findOwnedOfferOrThrow(data) {
-    assertValidOfferId(data);
+    assertValidObjectId(data, 'Offer');
 
     // Vérifier que l'offre existe
     const offerToUpdate = await Offer.findById(data.id);
@@ -514,7 +503,7 @@ const getAll = async (data) => {
 };
 
 const getOne = async (data) => {
-    assertValidOfferId(data);
+    assertValidObjectId(data, 'Offer');
 
     const offer = await Offer.findById(data.id).populate(
         'owner',
