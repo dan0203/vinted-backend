@@ -10,6 +10,37 @@ const escapeRegex = require('../utils/escapeRegex');
 
 // Dans ce service, la validation des données se fait manuellement, comparé à user service qui utilise le package Joi
 
+function assertValidOfferId(data) {
+    // data.id est une chaîne vide
+    if (data.id.trim() === '') {
+        throwError('Offer id is mandatory', 400);
+    }
+
+    // data.id au mauvais format
+    if (!mongoose.Types.ObjectId.isValid(data.id)) {
+        throwError('Invalid offer id', 400);
+    }
+}
+
+async function findOwnedOfferOrThrow(data) {
+    assertValidOfferId(data);
+
+    // Vérifier que l'offre existe
+    const offerToUpdate = await Offer.findById(data.id);
+
+    // Pas d'offre existante
+    if (!offerToUpdate) {
+        throwError('Offer does not exist', 404);
+    }
+
+    // L'offre n'appartient pas au user connecté
+    if (!data.user._id.equals(offerToUpdate.owner._id)) {
+        throwError('Unauthorized', 403);
+    }
+
+    return offerToUpdate;
+}
+
 const publish = async (data) => {
     if (data.body.title === undefined || data.body.title.trim() === '') {
         throwError('Title is mandatory', 400);
@@ -102,15 +133,7 @@ const publish = async (data) => {
 };
 
 const update = async (data) => {
-    // data.id est une chaîne vide
-    if (data.id.trim() === '') {
-        throwError('Offer id is mandatory', 400);
-    }
-
-    // data.id au mauvais format
-    if (!mongoose.Types.ObjectId.isValid(data.id)) {
-        throwError('Invalid offer id', 400);
-    }
+    const offerToUpdate = await findOwnedOfferOrThrow(data);
 
     if (data.body.title === undefined || data.body.title.trim() === '') {
         throwError('Title is mandatory', 400);
@@ -134,19 +157,6 @@ const update = async (data) => {
 
     if (price < 0) {
         throwError('Price must be greater than or equal to 0', 400);
-    }
-
-    // Vérifier que l'offre existe
-    const offerToUpdate = await Offer.findById(data.id);
-
-    // Pas d'offre existante
-    if (!offerToUpdate) {
-        throwError('Offer does not exist', 404);
-    }
-
-    // L'offre n'appartient pas au user connecté
-    if (!data.user._id.equals(offerToUpdate.owner._id)) {
-        throwError('Unauthorized', 403);
     }
 
     let cloudinaryResponse = null;
@@ -245,28 +255,7 @@ const update = async (data) => {
 };
 
 const updatePartial = async (data) => {
-    // data.id est une chaîne vide
-    if (data.id.trim() === '') {
-        throwError('Offer id is mandatory', 400);
-    }
-
-    // data.id au mauvais format
-    if (!mongoose.Types.ObjectId.isValid(data.id)) {
-        throwError('Invalid offer id', 400);
-    }
-
-    // Vérifier que l'offre existe
-    const offerToUpdate = await Offer.findById(data.id);
-
-    // Pas d'offre existante
-    if (!offerToUpdate) {
-        throwError('Offer does not exist', 404);
-    }
-
-    // L'offre n'appartient pas au user connecté
-    if (!data.user._id.equals(offerToUpdate.owner._id)) {
-        throwError('Unauthorized', 403);
-    }
+    const offerToUpdate = await findOwnedOfferOrThrow(data);
 
     const hasBody =
         data.body !== undefined &&
@@ -415,28 +404,7 @@ const updatePartial = async (data) => {
 };
 
 const remove = async (data) => {
-    // data ou data.id falsy (absent, null, chaîne vide...)
-    if (!data || !data.id || String(data.id).trim() === '') {
-        throwError('Offer id is mandatory', 400);
-    }
-
-    // data.id au mauvais format
-    if (!mongoose.Types.ObjectId.isValid(data.id)) {
-        throwError('Invalid offer id', 400);
-    }
-
-    // Vérifier que l'offre existe
-    const offerToRemove = await Offer.findById(data.id);
-
-    // Pas d'offre existante
-    if (!offerToRemove) {
-        throwError('Offer does not exist', 404);
-    }
-
-    // L'offre n'appartient pas au user connecté
-    if (!data.user._id.equals(offerToRemove.owner._id)) {
-        throwError('Unauthorized', 403);
-    }
+    await findOwnedOfferOrThrow(data);
 
     let removedOffer;
 
@@ -546,15 +514,7 @@ const getAll = async (data) => {
 };
 
 const getOne = async (data) => {
-    // data ou data.id falsy (absent, null, chaîne vide...)
-    if (!data || !data.id || String(data.id).trim() === '') {
-        throwError('Offer id is mandatory', 400);
-    }
-
-    // data.id au mauvais format
-    if (!mongoose.Types.ObjectId.isValid(data.id)) {
-        throwError('Invalid offer id', 400);
-    }
+    assertValidOfferId(data);
 
     const offer = await Offer.findById(data.id).populate(
         'owner',
