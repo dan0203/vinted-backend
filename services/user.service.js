@@ -8,6 +8,7 @@ const uid2 = require('uid2');
 // Utils
 const throwError = require('../utils/throwError');
 const assertValidObjectId = require('../utils/assertValidObjectId');
+const findByIdOrThrow = require('../utils/findByIdOrThrow');
 
 // Dans ce service, la validation des données se fait grâce au package Joi, comparé à offer service où on les effectue manuellement
 
@@ -100,12 +101,7 @@ const login = async (data) => {
 const getOne = async (data) => {
     assertValidObjectId(data, 'User');
 
-    const user = await User.findById(data.id);
-
-    // S'il n'existe pas, erreur
-    if (!user) {
-        throwError('User does not exist', 404);
-    }
+    const user = await findByIdOrThrow(User, data.id, 'User');
 
     return {
         _id: user._id,

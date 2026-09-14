@@ -8,26 +8,21 @@ const convertToBase64 = require('../utils/convertToBase64');
 const throwError = require('../utils/throwError');
 const escapeRegex = require('../utils/escapeRegex');
 const assertValidObjectId = require('../utils/assertValidObjectId');
+const findByIdOrThrow = require('../utils/findByIdOrThrow');
 
 // Dans ce service, la validation des données se fait manuellement, comparé à user service qui utilise le package Joi
 
 async function findOwnedOfferOrThrow(data) {
     assertValidObjectId(data, 'Offer');
 
-    // Vérifier que l'offre existe
-    const offerToUpdate = await Offer.findById(data.id);
-
-    // Pas d'offre existante
-    if (!offerToUpdate) {
-        throwError('Offer does not exist', 404);
-    }
+    const offer = await findByIdOrThrow(Offer, data.id, 'Offer');
 
     // L'offre n'appartient pas au user connecté
-    if (!data.user._id.equals(offerToUpdate.owner._id)) {
+    if (!data.user._id.equals(offer.owner._id)) {
         throwError('Unauthorized', 403);
     }
 
-    return offerToUpdate;
+    return offer;
 }
 
 const publish = async (data) => {
@@ -505,15 +500,8 @@ const getAll = async (data) => {
 const getOne = async (data) => {
     assertValidObjectId(data, 'Offer');
 
-    const offer = await Offer.findById(data.id).populate(
-        'owner',
-        '_id account'
-    );
-
-    // data.id valide au format MongoDB mais offre inexistante
-    if (!offer) {
-        throwError('Offer does not exist', 404);
-    }
+    const offer = await findByIdOrThrow(Offer, data.id, 'Offer');
+    await offer.populate('owner', '_id account');
 
     return {
         _id: offer._id,
