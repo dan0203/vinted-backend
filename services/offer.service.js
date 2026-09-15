@@ -1,14 +1,13 @@
 // Modules npm
-const cloudinary = require('cloudinary').v2;
 const mongoose = require('mongoose');
 // Model
 const Offer = require('../models/Offer');
 // Utils
-const convertToBase64 = require('../utils/convertToBase64');
 const throwError = require('../utils/throwError');
 const escapeRegex = require('../utils/escapeRegex');
 const assertValidObjectId = require('../utils/assertValidObjectId');
 const findByIdOrThrow = require('../utils/findByIdOrThrow');
+const { uploadImage, removeImage } = require('../utils/cloudinary');
 
 // Dans ce service, la validation des données se fait manuellement, comparé à user service qui utilise le package Joi
 
@@ -26,6 +25,14 @@ async function findOwnedOfferOrThrow(data) {
 }
 
 const publish = async (data) => {
+    const hasFiles = !!data.files;
+
+    if (!hasFiles)
+        throwError(
+            'A picture file must be sent using a param named "picture"',
+            400
+        );
+
     if (data.body.title === undefined || data.body.title.trim() === '') {
         throwError('Title is mandatory', 400);
     }
@@ -53,26 +60,7 @@ const publish = async (data) => {
     // On génère un id MongoDB pour le chemin de stockage de l'image dans cloudinary
     const newOfferId = new mongoose.Types.ObjectId();
 
-    let cloudinaryResponse = {};
-    const folderPath = `vinted/offers/${newOfferId}`;
-
-    if (data.files) {
-        if (!data.files.picture) {
-            throwError(
-                'Picture file must be sent using a param named "picture"',
-                400
-            );
-        }
-
-        // Transforme mon image de Buffer à String
-        const base64Image = convertToBase64(data.files.picture);
-
-        // On fait une requête à cloudinary pour qu'il héberge l'image
-        cloudinaryResponse = await cloudinary.uploader.upload(base64Image, {
-            // dans un sous-dossier correspondant à l'id de l'offre
-            asset_folder: folderPath,
-        });
-    }
+    const cloudinaryResponse = await uploadImage(data.files, newOfferId);
 
     const newOffer = new Offer({
         _id: newOfferId,
@@ -96,8 +84,8 @@ const publish = async (data) => {
                 EMPLACEMENT: data.body.city,
             },
         ],
-        product_pictures: [], // Si besoin d'uploader plusieurs images
         product_image: cloudinaryResponse,
+        product_pictures: [], // Si besoin d'uploader plusieurs images
         owner: data.user._id,
     });
 
@@ -105,8 +93,7 @@ const publish = async (data) => {
         await newOffer.save();
     } catch (error) {
         if (cloudinaryResponse.public_id) {
-            await cloudinary.uploader.destroy(cloudinaryResponse.public_id);
-            await cloudinary.api.delete_folder(folderPath);
+            await removeImage(cloudinaryResponse.public_id, newOfferId);
         }
         throw error;
     }
@@ -117,6 +104,14 @@ const publish = async (data) => {
 };
 
 const update = async (data) => {
+    const hasFiles = !!data.files;
+
+    if (!hasFiles)
+        throwError(
+            'A picture file must be sent using a param named "picture"',
+            400
+        );
+
     const offerToUpdate = await findOwnedOfferOrThrow(data);
 
     if (data.body.title === undefined || data.body.title.trim() === '') {
@@ -143,26 +138,7 @@ const update = async (data) => {
         throwError('Price must be greater than or equal to 0', 400);
     }
 
-    let cloudinaryResponse = null;
-    const folderPath = `vinted/offers/${data.id}`;
-
-    if (data.files) {
-        if (!data.files.picture) {
-            throwError(
-                'Picture file must be sent using a param named "picture"',
-                400
-            );
-        }
-
-        // Transforme mon image de Buffer à String
-        const base64Image = convertToBase64(data.files.picture);
-
-        // On fait une requête à cloudinary pour qu'il héberge l'image
-        cloudinaryResponse = await cloudinary.uploader.upload(base64Image, {
-            // dans un sous-dossier correspondant à l'id de l'offre
-            asset_folder: folderPath,
-        });
-    }
+    const cloudinaryResponse = await uploadImage(data.files, data.id);
 
     const updateData = {
         product_name: data.body.title,
@@ -185,13 +161,10 @@ const update = async (data) => {
                 EMPLACEMENT: data.body.city,
             },
         ],
+        product_image: cloudinaryResponse,
         product_pictures: [], // Si besoin d'uploader plusieurs images
         owner: data.user._id,
     };
-
-    if (cloudinaryResponse) {
-        updateData.product_image = cloudinaryResponse;
-    }
 
     let updatedOffer;
 
@@ -201,8 +174,8 @@ const update = async (data) => {
             runValidators: true,
         });
     } catch (error) {
-        if (cloudinaryResponse && cloudinaryResponse.public_id) {
-            await cloudinary.uploader.destroy(cloudinaryResponse.public_id);
+        if (cloudinaryResponse.public_id) {
+            await removeImage(cloudinaryResponse.public_id);
         }
         throw error;
     }
@@ -210,8 +183,8 @@ const update = async (data) => {
     // S'il y a une erreur dans findByIdAndUpdate, il renvoie un élément vide
     // Dans ce cas, supprimer l'image que l'on vient d'uploader et lever une exception
     if (!updatedOffer) {
-        if (cloudinaryResponse && cloudinaryResponse.public_id) {
-            await cloudinary.uploader.destroy(cloudinaryResponse.public_id);
+        if (cloudinaryResponse.public_id) {
+            await removeImage(cloudinaryResponse.public_id);
         }
 
         throwError('Failed to update offer', 500);
@@ -229,10 +202,8 @@ const update = async (data) => {
     };
 
     // Si tout s'est bien passé, on supprime l'ancienne image
-    if (cloudinaryResponse && offerToUpdate.product_image.public_id) {
-        await cloudinary.uploader.destroy(
-            offerToUpdate.product_image.public_id
-        );
+    if (offerToUpdate.product_image.public_id) {
+        await removeImage(offerToUpdate.product_image.public_id);
     }
 
     return updatedOfferToReturn;
@@ -320,27 +291,9 @@ const updatePartial = async (data) => {
 
     let cloudinaryResponse;
     if (hasFiles) {
-        const folderPath = `vinted/offers/${data.id}`;
+        cloudinaryResponse = await uploadImage(data.files, data.id);
 
-        if (!data.files.picture) {
-            throwError(
-                'Picture file must be sent using a param named "picture"',
-                400
-            );
-        }
-
-        // Transforme mon image de Buffer à String
-        const base64Image = convertToBase64(data.files.picture);
-
-        // On fait une requête à cloudinary pour qu'il héberge l'image
-        cloudinaryResponse = await cloudinary.uploader.upload(base64Image, {
-            // dans un sous-dossier correspondant à l'id de l'offre
-            asset_folder: folderPath,
-        });
-
-        if (cloudinaryResponse) {
-            updateFields.product_image = cloudinaryResponse;
-        }
+        updateFields.product_image = cloudinaryResponse;
     }
 
     let updatedOffer;
@@ -356,9 +309,7 @@ const updatePartial = async (data) => {
             throwError('Failed to update offer', 500);
         }
     } catch (error) {
-        if (cloudinaryResponse !== undefined && cloudinaryResponse.public_id) {
-            await cloudinary.uploader.destroy(cloudinaryResponse.public_id);
-        }
+        await removeImage(cloudinaryResponse.public_id);
 
         throw error;
     }
@@ -379,9 +330,7 @@ const updatePartial = async (data) => {
         cloudinaryResponse !== undefined &&
         offerToUpdate.product_image.public_id
     ) {
-        await cloudinary.uploader.destroy(
-            offerToUpdate.product_image.public_id
-        );
+        await removeImage(offerToUpdate.product_image.public_id);
     }
 
     return updatedOfferToReturn;
@@ -406,11 +355,9 @@ const remove = async (data) => {
     // Si tout s'est bien passé, on supprime les images du dossier et le dossier lui-même dans Cloudinary
     if (removedOffer.product_image.public_id) {
         try {
-            await cloudinary.uploader.destroy(
-                removedOffer.product_image.public_id
-            );
-            await cloudinary.api.delete_folder(
-                `vinted/offers/${removedOffer._id}`
+            await removeImage(
+                removedOffer.product_image.public_id,
+                removedOffer._id
             );
         } catch (error) {
             console.error(
