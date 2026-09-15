@@ -12,7 +12,7 @@ const { uploadImage, removeImage } = require('../utils/cloudinary');
 // Dans ce service, la validation des données se fait manuellement, comparé à user service qui utilise le package Joi
 
 async function findOwnedOfferOrThrow(data) {
-    assertValidObjectId(data, 'Offer');
+    assertValidObjectId(data.id, 'Offer');
 
     const offer = await findByIdOrThrow(Offer, data.id, 'Offer');
 
@@ -445,7 +445,7 @@ const getAll = async (data) => {
 };
 
 const getOne = async (data) => {
-    assertValidObjectId(data, 'Offer');
+    assertValidObjectId(data.id, 'Offer');
 
     const offer = await findByIdOrThrow(Offer, data.id, 'Offer');
     await offer.populate('owner', '_id account');

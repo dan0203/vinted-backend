@@ -99,7 +99,7 @@ const login = async (data) => {
 };
 
 const getOne = async (data) => {
-    assertValidObjectId(data, 'User');
+    assertValidObjectId(data.id, 'User');
 
     const user = await findByIdOrThrow(User, data.id, 'User');
 
