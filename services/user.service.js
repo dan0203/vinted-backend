@@ -16,7 +16,11 @@ const {
     findByIdAndUpdateOrThrow,
     findOneAndDeleteOrThrow,
 } = require('../utils/mongooseOrThrow');
-const { USER } = require('../utils/constants');
+const {
+    USER,
+    MAX_LOGIN_ATTEMPTS,
+    ACCOUNT_LOCK_MS,
+} = require('../utils/constants');
 
 const signupSchema = Joi.object({
     email: Joi.string().email().required(),
@@ -123,11 +127,23 @@ const login = async (data) => {
         throwError('Unauthorized', 403);
     }
 
+    if (user.lockUntil && user.lockUntil.getTime() > Date.now()) {
+        throwError('Account locked, please try again later', 423);
+    }
+
     const isPasswordValid = await bcrypt.compare(data.password, user.hash);
     if (!isPasswordValid) {
+        user.failedLoginAttempts += 1;
+        if (user.failedLoginAttempts >= MAX_LOGIN_ATTEMPTS) {
+            user.lockUntil = new Date(Date.now() + ACCOUNT_LOCK_MS);
+            user.failedLoginAttempts = 0;
+        }
+        await user.save();
         throwError('Unauthorized', 403);
     }
 
+    user.failedLoginAttempts = 0;
+    user.lockUntil = null;
     user.token = uid2(16);
     user.tokenIssuedAt = new Date();
     await user.save();

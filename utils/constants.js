@@ -8,6 +8,8 @@ const FIELD_SORT_OPTIONS = ['price-asc', 'price-desc'];
 const OFFER = 'offer';
 const USER = 'user';
 const MAX_TOKEN_AGE_MS = 30 * 24 * 60 * 60 * 1000;
+const MAX_LOGIN_ATTEMPTS = 5;
+const ACCOUNT_LOCK_MS = 15 * 60 * 1000;
 
 module.exports = {
     MIN_PRICE,
@@ -20,4 +22,6 @@ module.exports = {
     OFFER,
     USER,
     MAX_TOKEN_AGE_MS,
+    MAX_LOGIN_ATTEMPTS,
+    ACCOUNT_LOCK_MS,
 };

@@ -12,6 +12,8 @@ const userSchema = new Schema({
     hash: { type: String, required: true },
     token: { type: String, required: true },
     tokenIssuedAt: { type: Date, required: true, default: Date.now },
+    failedLoginAttempts: { type: Number, required: true, default: 0 },
+    lockUntil: { type: Date, default: null },
 });
 
 const User = mongoose.model('User', userSchema);

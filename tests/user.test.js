@@ -3,7 +3,7 @@ const app = require('../app');
 const { connect, clearDatabase, closeDatabase } = require('./setupTestDb');
 const cloudinary = require('../utils/cloudinary');
 const User = require('../models/User');
-const { MAX_TOKEN_AGE_MS } = require('../utils/constants');
+const { MAX_TOKEN_AGE_MS, MAX_LOGIN_ATTEMPTS } = require('../utils/constants');
 
 // Mocks Cloudinary for PUT/PATCH /users/:id (avatar) and, indirectly, for
 // the DELETE cascade that goes through offer.service (publishing/removing offers).
@@ -113,6 +113,43 @@ describe('POST /users/login', () => {
         });
 
         expect(response.status).toBe(403);
+    });
+
+    it('locks the account after too many failed attempts, even with the right password', async () => {
+        for (let i = 0; i < MAX_LOGIN_ATTEMPTS; i++) {
+            await request(app).post('/users/login').send({
+                email: 'jane@example.com',
+                password: 'wrongPassword',
+            });
+        }
+
+        const response = await request(app).post('/users/login').send({
+            email: 'jane@example.com',
+            password: 'secret123',
+        });
+
+        expect(response.status).toBe(423);
+    });
+
+    it('resets the failed attempt counter after a successful login', async () => {
+        await request(app).post('/users/login').send({
+            email: 'jane@example.com',
+            password: 'wrongPassword',
+        });
+
+        const success = await request(app).post('/users/login').send({
+            email: 'jane@example.com',
+            password: 'secret123',
+        });
+        expect(success.status).toBe(200);
+
+        for (let i = 0; i < MAX_LOGIN_ATTEMPTS - 1; i++) {
+            const response = await request(app).post('/users/login').send({
+                email: 'jane@example.com',
+                password: 'wrongPassword',
+            });
+            expect(response.status).toBe(403);
+        }
     });
 });
 
