@@ -1,5 +1,6 @@
 const express = require('express');
 const cors = require('cors');
+const helmet = require('helmet');
 const cloudinary = require('cloudinary').v2;
 const userRoutes = require('./routes/user.route');
 const offerRoutes = require('./routes/offer.route');
@@ -11,6 +12,8 @@ cloudinary.config({
 });
 
 const app = express();
+app.use(helmet());
+app.disable('x-powered-by');
 app.use(cors());
 app.use(express.json());
 
