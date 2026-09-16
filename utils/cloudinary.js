@@ -2,6 +2,14 @@ const cloudinary = require('cloudinary').v2;
 const convertToBase64 = require('./convertToBase64');
 const throwError = require('./throwError');
 
+const ALLOWED_IMAGE_TYPES = ['image/jpeg', 'image/png', 'image/webp'];
+
+function assertAllowedImageType(file) {
+    if (!ALLOWED_IMAGE_TYPES.includes(file.mimetype)) {
+        throwError('Only JPEG, PNG or WebP images are allowed', 400);
+    }
+}
+
 async function uploadImage(files, id) {
     if (!files || !id) {
         throwError(`Upload Cloudinary failed: incorrect data`, 400);
@@ -17,6 +25,7 @@ async function uploadImage(files, id) {
         );
     }
 
+    assertAllowedImageType(files.picture);
     const base64Image = convertToBase64(files.picture);
 
     try {
@@ -42,6 +51,8 @@ async function uploadImages(files, id) {
     const pictureFiles = Array.isArray(files.pictures)
         ? files.pictures
         : [files.pictures];
+
+    pictureFiles.forEach(assertAllowedImageType);
 
     const results = await Promise.allSettled(
         pictureFiles.map((file) =>
@@ -75,6 +86,7 @@ async function uploadAvatar(files, id) {
         return undefined;
     }
 
+    assertAllowedImageType(files.avatar);
     const base64Image = convertToBase64(files.avatar);
 
     try {
