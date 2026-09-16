@@ -1,6 +1,7 @@
 const express = require('express');
 const cors = require('cors');
 const helmet = require('helmet');
+const sanitizeMongo = require('./middlewares/sanitizeMongo');
 const cloudinary = require('cloudinary').v2;
 const userRoutes = require('./routes/user.route');
 const offerRoutes = require('./routes/offer.route');
@@ -16,6 +17,7 @@ app.use(helmet());
 app.disable('x-powered-by');
 app.use(cors({ origin: process.env.FRONTEND_URL }));
 app.use(express.json({ limit: '10kb' }));
+app.use(sanitizeMongo);
 
 app.use('/users', userRoutes);
 app.use('/offers', offerRoutes);
