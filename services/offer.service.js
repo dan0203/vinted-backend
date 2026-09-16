@@ -223,15 +223,15 @@ const publish = async (data) => {
 // renvoie 404 (comme une offre inexistante) plutôt que 403, afin de ne pas
 // révéler son existence.
 const update = async (data) => {
-    assertValidOfferId(data.id);
+    assertValidOfferId(data.params.id);
     data.body = assertValid(offerBodySchema, data.body);
     assertPictureCountWithinLimit(data.files);
 
-    const image = await uploadImage(data.files, data.id);
+    const image = await uploadImage(data.files, data.params.id);
     // Remplacement complet (PUT) : pas de "pictures" envoyé => on repart d'un
     // lot d'images secondaires vide, comme pour les autres champs.
     const pictures = await withImageRollback([image], () =>
-        uploadImages(data.files, data.id)
+        uploadImages(data.files, data.params.id)
     );
 
     const updateFields = {
@@ -248,7 +248,7 @@ const update = async (data) => {
         () =>
             findOneAndUpdateOrThrow(
                 Offer,
-                { _id: data.id, owner: data.user._id },
+                { _id: data.params.id, owner: data.user._id },
                 OFFER,
                 updateFields,
                 replaceOptions,
@@ -282,7 +282,7 @@ const updatePartial = async (data) => {
         throwError('No data was sent', 400);
     }
 
-    assertValidOfferId(data.id);
+    assertValidOfferId(data.params.id);
     if (hasBody) {
         data.body = assertValid(offerBodyPartialSchema, data.body);
     }
@@ -290,7 +290,7 @@ const updatePartial = async (data) => {
 
     const offerToUpdate = await findOneOrThrow(
         Offer,
-        { _id: data.id, owner: data.user._id },
+        { _id: data.params.id, owner: data.user._id },
         OFFER
     );
 
@@ -315,14 +315,14 @@ const updatePartial = async (data) => {
     const uploadedImages = [];
 
     if (hasNewImage) {
-        const image = await uploadImage(data.files, data.id);
+        const image = await uploadImage(data.files, data.params.id);
         updateFields.image = image;
         uploadedImages.push(image);
     }
 
     if (hasNewPictures) {
         const pictures = await withImageRollback(uploadedImages, () =>
-            uploadImages(data.files, data.id)
+            uploadImages(data.files, data.params.id)
         );
         updateFields.pictures = pictures;
         uploadedImages.push(...pictures);
@@ -331,7 +331,7 @@ const updatePartial = async (data) => {
     const updatedOffer = await withImageRollback(uploadedImages, () =>
         findByIdAndUpdateOrThrow(
             Offer,
-            data.id,
+            data.params.id,
             OFFER,
             updateFields,
             partialUpdateOptions,
@@ -360,11 +360,11 @@ const updatePartial = async (data) => {
 // La vérification de propriété et la suppression sont faites en une seule
 // requête atomique, voir le commentaire de update() ci-dessus.
 const remove = async (data) => {
-    assertValidOfferId(data.id);
+    assertValidOfferId(data.params.id);
 
     const removedOffer = await findOneAndDeleteOrThrow(
         Offer,
-        { _id: data.id, owner: data.user._id },
+        { _id: data.params.id, owner: data.user._id },
         OFFER,
         populate
     );
@@ -383,17 +383,17 @@ const remove = async (data) => {
 };
 
 const getAll = async (data) => {
-    data = assertValid(getAllQuerySchema, data);
+    const query = assertValid(getAllQuerySchema, data.query);
 
     const filters = {};
 
     // Filtre title
-    if (data.title) {
-        filters.name = new RegExp(escapeRegex(data.title), 'i');
+    if (query.title) {
+        filters.name = new RegExp(escapeRegex(query.title), 'i');
     }
 
     // Filtres priceMin et priceMax
-    const { priceMin: min, priceMax: max } = data;
+    const { priceMin: min, priceMax: max } = query;
 
     if (min !== undefined && max !== undefined && min > max) {
         throwError('priceMin cannot be greater than priceMax', 400);
@@ -406,12 +406,12 @@ const getAll = async (data) => {
     }
 
     // Filtre page
-    const page = data.page === undefined ? 1 : data.page;
+    const page = query.page === undefined ? 1 : query.page;
     const limit = OFFERS_PER_PAGE;
     const skip = limit * (page - 1);
 
     // Filtre sort
-    const sort = data.sort === undefined ? FIELD_SORT_OPTIONS[0] : data.sort;
+    const sort = query.sort === undefined ? FIELD_SORT_OPTIONS[0] : query.sort;
     const direction = sort.replace('price-', '');
     const sortBy = { price: direction };
 
@@ -429,9 +429,9 @@ const getAll = async (data) => {
 };
 
 const getOne = async (data) => {
-    assertValidOfferId(data.id);
+    assertValidOfferId(data.params.id);
 
-    const offer = await findByIdOrThrow(Offer, data.id, OFFER, populate);
+    const offer = await findByIdOrThrow(Offer, data.params.id, OFFER, populate);
 
     return toOfferDTO(offer);
 };
