@@ -25,8 +25,11 @@
         "express-rate-limit": "^8.7.0",
         "helmet": "^8.3.0",
         "joi": "^18.0.2",
-        "mongoose": "^9.2.1",
+        "mongoose": "^9.10.0",
         "uid2": "^1.0.0"
+    },
+    "overrides": {
+        "mongodb": "7.0.0"
     },
     "devDependencies": {
         "@eslint/js": "^10.0.1",
