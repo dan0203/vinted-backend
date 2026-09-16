@@ -168,7 +168,9 @@ describe('POST /offers/publish', () => {
     });
 
     it('attempts no cleanup when the main image upload itself fails', async () => {
-        cloudinary.uploadImage.mockRejectedValueOnce(new Error('upload failed'));
+        cloudinary.uploadImage.mockRejectedValueOnce(
+            new Error('upload failed')
+        );
         const removeImageCallsBefore = cloudinary.removeImage.mock.calls.length;
 
         const response = await attachPicture(
@@ -193,7 +195,9 @@ describe('POST /offers/publish', () => {
     });
 
     it('rolls back the main image when uploading secondary pictures fails', async () => {
-        cloudinary.uploadImages.mockRejectedValueOnce(new Error('upload failed'));
+        cloudinary.uploadImages.mockRejectedValueOnce(
+            new Error('upload failed')
+        );
         const removeImageCallsBefore = cloudinary.removeImage.mock.calls.length;
 
         const response = await attachPictures(
@@ -214,7 +218,9 @@ describe('POST /offers/publish', () => {
         );
 
         expect(response.status).toBeGreaterThanOrEqual(400);
-        expect(cloudinary.removeImage).toHaveBeenCalledWith('vinted/offers/fake');
+        expect(cloudinary.removeImage).toHaveBeenCalledWith(
+            'vinted/offers/fake'
+        );
         expect(cloudinary.removeImage.mock.calls.length).toBe(
             removeImageCallsBefore + 1
         );
@@ -429,7 +435,9 @@ describe('PUT /offers/:id', () => {
     });
 
     it('attempts no cleanup when the new main image upload itself fails', async () => {
-        cloudinary.uploadImage.mockRejectedValueOnce(new Error('upload failed'));
+        cloudinary.uploadImage.mockRejectedValueOnce(
+            new Error('upload failed')
+        );
         const removeImageCallsBefore = cloudinary.removeImage.mock.calls.length;
 
         const response = await attachPicture(
@@ -454,7 +462,9 @@ describe('PUT /offers/:id', () => {
     });
 
     it('rolls back the new main image when uploading secondary pictures fails', async () => {
-        cloudinary.uploadImages.mockRejectedValueOnce(new Error('upload failed'));
+        cloudinary.uploadImages.mockRejectedValueOnce(
+            new Error('upload failed')
+        );
         const removeImageCallsBefore = cloudinary.removeImage.mock.calls.length;
 
         const response = await attachPictures(
@@ -475,7 +485,9 @@ describe('PUT /offers/:id', () => {
         );
 
         expect(response.status).toBeGreaterThanOrEqual(400);
-        expect(cloudinary.removeImage).toHaveBeenCalledWith('vinted/offers/fake');
+        expect(cloudinary.removeImage).toHaveBeenCalledWith(
+            'vinted/offers/fake'
+        );
         expect(cloudinary.removeImage.mock.calls.length).toBe(
             removeImageCallsBefore + 1
         );
@@ -604,7 +616,9 @@ describe('PATCH /offers/:id', () => {
     });
 
     it('attempts no cleanup when the new main image upload itself fails', async () => {
-        cloudinary.uploadImage.mockRejectedValueOnce(new Error('upload failed'));
+        cloudinary.uploadImage.mockRejectedValueOnce(
+            new Error('upload failed')
+        );
         const removeImageCallsBefore = cloudinary.removeImage.mock.calls.length;
 
         const response = await attachPicture(
@@ -621,7 +635,9 @@ describe('PATCH /offers/:id', () => {
     });
 
     it('rolls back the new main image when uploading secondary pictures fails', async () => {
-        cloudinary.uploadImages.mockRejectedValueOnce(new Error('upload failed'));
+        cloudinary.uploadImages.mockRejectedValueOnce(
+            new Error('upload failed')
+        );
         const removeImageCallsBefore = cloudinary.removeImage.mock.calls.length;
 
         const response = await attachPictures(
@@ -634,7 +650,9 @@ describe('PATCH /offers/:id', () => {
         );
 
         expect(response.status).toBeGreaterThanOrEqual(400);
-        expect(cloudinary.removeImage).toHaveBeenCalledWith('vinted/offers/fake');
+        expect(cloudinary.removeImage).toHaveBeenCalledWith(
+            'vinted/offers/fake'
+        );
         expect(cloudinary.removeImage.mock.calls.length).toBe(
             removeImageCallsBefore + 1
         );
