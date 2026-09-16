@@ -2,6 +2,21 @@ const request = require('supertest');
 const app = require('../app');
 const { connect, clearDatabase, closeDatabase } = require('./setupTestDb');
 
+// Le picture est obligatoire au publish/update : on mocke Cloudinary pour ne
+// pas dépendre du réseau ni de vrais credentials pendant les tests.
+jest.mock('../utils/cloudinary', () => ({
+    uploadImage: jest.fn().mockResolvedValue({
+        public_id: 'vinted/offers/fake',
+        secure_url: 'https://res.cloudinary.com/fake/image/upload/fake.jpg',
+    }),
+    removeImage: jest.fn().mockResolvedValue(undefined),
+}));
+
+// Un petit buffer suffit : express-fileupload n'a besoin que d'un fichier
+// présent sous le champ "picture", son contenu n'est jamais lu par le mock.
+const attachPicture = (req) =>
+    req.attach('picture', Buffer.from('fake-image'), 'picture.jpg');
+
 let token;
 
 beforeAll(async () => {
@@ -35,18 +50,20 @@ describe('POST /offers/publish', () => {
         expect(response.status).toBe(401);
     });
 
-    it('publishes an offer without a picture', async () => {
-        const response = await request(app)
-            .post('/offers/publish')
-            .set('Authorization', `Bearer ${token}`)
-            .field('title', 'Vintage jacket')
-            .field('description', 'Good condition, worn a few times')
-            .field('price', '25')
-            .field('brand', "Levi's")
-            .field('size', 'M')
-            .field('color', 'Blue')
-            .field('condition', 'Good')
-            .field('city', 'Paris');
+    it('publishes an offer', async () => {
+        const response = await attachPicture(
+            request(app)
+                .post('/offers/publish')
+                .set('Authorization', `Bearer ${token}`)
+                .field('title', 'Vintage jacket')
+                .field('description', 'Good condition, worn a few times')
+                .field('price', '25')
+                .field('brand', "Levi's")
+                .field('size', 'M')
+                .field('color', 'Blue')
+                .field('condition', 'Good')
+                .field('city', 'Paris')
+        );
 
         expect(response.status).toBe(201);
         expect(response.body.product_name).toBe('Vintage jacket');
@@ -67,12 +84,19 @@ describe('POST /offers/publish', () => {
 
 describe('GET /offers', () => {
     beforeEach(async () => {
-        await request(app)
-            .post('/offers/publish')
-            .set('Authorization', `Bearer ${token}`)
-            .field('title', 'Vintage jacket')
-            .field('description', 'Good condition')
-            .field('price', '25');
+        await attachPicture(
+            request(app)
+                .post('/offers/publish')
+                .set('Authorization', `Bearer ${token}`)
+                .field('title', 'Vintage jacket')
+                .field('description', 'Good condition')
+                .field('price', '25')
+                .field('brand', "Levi's")
+                .field('size', 'M')
+                .field('color', 'Blue')
+                .field('condition', 'Good')
+                .field('city', 'Paris')
+        );
     });
 
     it('lists offers', async () => {
@@ -155,48 +179,71 @@ describe('PUT /offers/:id', () => {
     let offerId;
 
     beforeEach(async () => {
-        const publishResponse = await request(app)
-            .post('/offers/publish')
-            .set('Authorization', `Bearer ${token}`)
-            .field('title', 'Vintage jacket')
-            .field('description', 'Good condition, worn a few times')
-            .field('price', '25')
-            .field('brand', "Levi's")
-            .field('size', 'M')
-            .field('color', 'Blue')
-            .field('condition', 'Good')
-            .field('city', 'Paris');
+        const publishResponse = await attachPicture(
+            request(app)
+                .post('/offers/publish')
+                .set('Authorization', `Bearer ${token}`)
+                .field('title', 'Vintage jacket')
+                .field('description', 'Good condition, worn a few times')
+                .field('price', '25')
+                .field('brand', "Levi's")
+                .field('size', 'M')
+                .field('color', 'Blue')
+                .field('condition', 'Good')
+                .field('city', 'Paris')
+        );
         offerId = publishResponse.body._id;
     });
 
+    // PUT exige tous les champs (remplacement complet), y compris l'image
     testsCommonToUpdateMethods(
         'put',
         () => offerId,
         (req) =>
-            req
-                .field('title', 'Vintage jacket')
-                .field('description', 'Good condition, worn a few times')
-                .field('price', '30')
+            attachPicture(
+                req
+                    .field('title', 'Vintage jacket')
+                    .field('description', 'Good condition, worn a few times')
+                    .field('price', '30')
+                    .field('brand', "Levi's")
+                    .field('size', 'M')
+                    .field('color', 'Blue')
+                    .field('condition', 'Good')
+                    .field('city', 'Paris')
+            )
     );
 
     it('rejects a missing title', async () => {
-        const response = await request(app)
-            .put(`/offers/${offerId}`)
-            .set('Authorization', `Bearer ${token}`)
-            .field('description', 'Good condition')
-            .field('price', '30');
+        const response = await attachPicture(
+            request(app)
+                .put(`/offers/${offerId}`)
+                .set('Authorization', `Bearer ${token}`)
+                .field('description', 'Good condition')
+                .field('price', '30')
+                .field('brand', "Levi's")
+                .field('size', 'M')
+                .field('color', 'Blue')
+                .field('condition', 'Good')
+                .field('city', 'Paris')
+        );
 
         expect(response.status).toBe(400);
     });
 
     it('fully replaces the offer', async () => {
-        const response = await request(app)
-            .put(`/offers/${offerId}`)
-            .set('Authorization', `Bearer ${token}`)
-            .field('title', 'Updated jacket')
-            .field('description', 'Updated description')
-            .field('price', '40')
-            .field('brand', 'Nike');
+        const response = await attachPicture(
+            request(app)
+                .put(`/offers/${offerId}`)
+                .set('Authorization', `Bearer ${token}`)
+                .field('title', 'Updated jacket')
+                .field('description', 'Updated description')
+                .field('price', '40')
+                .field('brand', 'Nike')
+                .field('size', 'L')
+                .field('color', 'Black')
+                .field('condition', 'New')
+                .field('city', 'Lyon')
+        );
 
         expect(response.status).toBe(200);
         expect(response.body.product_name).toBe('Updated jacket');
@@ -204,8 +251,10 @@ describe('PUT /offers/:id', () => {
 
         const details = Object.assign({}, ...response.body.product_details);
         expect(details.MARQUE).toBe('Nike');
-        // PUT remplace tout product_details : les champs non envoyés ne sont pas conservés
-        expect(details.TAILLE).toBeFalsy();
+        expect(details.TAILLE).toBe('L');
+        expect(details.COULEUR).toBe('Black');
+        expect(details.ÉTAT).toBe('New');
+        expect(details.EMPLACEMENT).toBe('Lyon');
     });
 });
 
@@ -213,17 +262,19 @@ describe('PATCH /offers/:id', () => {
     let offerId;
 
     beforeEach(async () => {
-        const publishResponse = await request(app)
-            .post('/offers/publish')
-            .set('Authorization', `Bearer ${token}`)
-            .field('title', 'Vintage jacket')
-            .field('description', 'Good condition, worn a few times')
-            .field('price', '25')
-            .field('brand', "Levi's")
-            .field('size', 'M')
-            .field('color', 'Blue')
-            .field('condition', 'Good')
-            .field('city', 'Paris');
+        const publishResponse = await attachPicture(
+            request(app)
+                .post('/offers/publish')
+                .set('Authorization', `Bearer ${token}`)
+                .field('title', 'Vintage jacket')
+                .field('description', 'Good condition, worn a few times')
+                .field('price', '25')
+                .field('brand', "Levi's")
+                .field('size', 'M')
+                .field('color', 'Blue')
+                .field('condition', 'Good')
+                .field('city', 'Paris')
+        );
         offerId = publishResponse.body._id;
     });
 
@@ -266,12 +317,19 @@ describe('DELETE /offers/:id', () => {
     let offerId;
 
     beforeEach(async () => {
-        const publishResponse = await request(app)
-            .post('/offers/publish')
-            .set('Authorization', `Bearer ${token}`)
-            .field('title', 'Vintage jacket')
-            .field('description', 'Good condition')
-            .field('price', '25');
+        const publishResponse = await attachPicture(
+            request(app)
+                .post('/offers/publish')
+                .set('Authorization', `Bearer ${token}`)
+                .field('title', 'Vintage jacket')
+                .field('description', 'Good condition')
+                .field('price', '25')
+                .field('brand', "Levi's")
+                .field('size', 'M')
+                .field('color', 'Blue')
+                .field('condition', 'Good')
+                .field('city', 'Paris')
+        );
         offerId = publishResponse.body._id;
     });
 
