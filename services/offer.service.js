@@ -6,7 +6,12 @@ const Offer = require('../models/Offer');
 // Utils
 const throwError = require('../utils/throwError');
 const escapeRegex = require('../utils/escapeRegex');
-const { uploadImage, removeImage } = require('../utils/cloudinary');
+const {
+    uploadImage,
+    uploadImages,
+    removeImage,
+    deleteOfferFolder,
+} = require('../utils/cloudinary');
 const joiObjectId = require('../utils/joiObjectId');
 const {
     MIN_PRICE,
@@ -14,6 +19,7 @@ const {
     MIN_PRICEMAX,
     MIN_PAGE,
     OFFERS_PER_PAGE,
+    MAX_PICTURES,
     FIELD_SORT_OPTIONS,
     OFFER,
 } = require('../utils/constants');
@@ -136,36 +142,61 @@ function toOfferDTO(offer) {
 
 // Log non bloquant : on ne fait jamais échouer une opération réussie en DB
 // à cause d'un nettoyage Cloudinary qui échoue derrière.
-async function safeRemoveImage(publicId, folderId, logLabel) {
+async function safeRemoveImage(publicId, logLabel) {
     if (!publicId) return;
 
     try {
-        await removeImage(publicId, folderId);
+        await removeImage(publicId);
     } catch (error) {
         console.error(logLabel, error.error?.message || error.message || error);
     }
 }
 
-// Si `operation` échoue, on supprime l'image qu'on venait d'uploader
-// pour ne pas laisser d'image orpheline sur Cloudinary.
-async function withImageRollback(cloudinaryResponse, operation) {
+async function safeDeleteOfferFolder(offerId) {
+    try {
+        await deleteOfferFolder(offerId);
+    } catch (error) {
+        console.error(
+            'Failed deleting offer folder',
+            error.error?.message || error.message || error
+        );
+    }
+}
+
+// Si `operation` échoue, on supprime les images qu'on venait d'uploader
+// (`uploadedImages`, réponses Cloudinary avec un `public_id`) pour ne pas
+// en laisser d'orphelines.
+async function withImageRollback(uploadedImages, operation) {
     try {
         return await operation();
     } catch (error) {
-        if (cloudinaryResponse?.public_id) {
-            await removeImage(cloudinaryResponse.public_id);
-        }
+        await Promise.allSettled(
+            uploadedImages.map((image) => removeImage(image?.public_id))
+        );
         throw error;
+    }
+}
+
+function assertPictureCountWithinLimit(files) {
+    if (!files || !files.pictures) return;
+
+    const count = Array.isArray(files.pictures) ? files.pictures.length : 1;
+    if (count > MAX_PICTURES) {
+        throwError(`You can upload at most ${MAX_PICTURES} pictures`, 400);
     }
 }
 
 const publish = async (data) => {
     data.body = assertValid(offerBodySchema, data.body);
+    assertPictureCountWithinLimit(data.files);
 
     // On génère un id MongoDB pour le chemin de stockage de l'image dans cloudinary
     const newOfferId = new mongoose.Types.ObjectId();
 
-    const cloudinaryResponse = await uploadImage(data.files, newOfferId);
+    const image = await uploadImage(data.files, newOfferId);
+    const pictures = await withImageRollback([image], () =>
+        uploadImages(data.files, newOfferId)
+    );
 
     const newOffer = new Offer({
         _id: newOfferId,
@@ -173,12 +204,12 @@ const publish = async (data) => {
         description: data.body.description,
         price: data.body.price,
         details: buildDetails(data.body),
-        image: cloudinaryResponse,
-        pictures: [], // Si besoin d'uploader plusieurs images
+        image,
+        pictures,
         owner: data.user._id,
     });
 
-    const publishedOffer = await withImageRollback(cloudinaryResponse, () =>
+    const publishedOffer = await withImageRollback([image, ...pictures], () =>
         save(newOffer, populate)
     );
 
@@ -194,34 +225,46 @@ const publish = async (data) => {
 const update = async (data) => {
     assertValidOfferId(data.id);
     data.body = assertValid(offerBodySchema, data.body);
+    assertPictureCountWithinLimit(data.files);
 
-    const cloudinaryResponse = await uploadImage(data.files, data.id);
+    const image = await uploadImage(data.files, data.id);
+    // Remplacement complet (PUT) : pas de "pictures" envoyé => on repart d'un
+    // lot d'images secondaires vide, comme pour les autres champs.
+    const pictures = await withImageRollback([image], () =>
+        uploadImages(data.files, data.id)
+    );
 
     const updateFields = {
         name: data.body.title,
         description: data.body.description,
         price: data.body.price,
         details: buildDetails(data.body),
-        image: cloudinaryResponse,
-        pictures: [], // Si besoin d'uploader plusieurs images
+        image,
+        pictures,
     };
 
-    const offerBeforeUpdate = await withImageRollback(cloudinaryResponse, () =>
-        findOneAndUpdateOrThrow(
-            Offer,
-            { _id: data.id, owner: data.user._id },
-            OFFER,
-            updateFields,
-            replaceOptions,
-            populate
-        )
+    const offerBeforeUpdate = await withImageRollback(
+        [image, ...pictures],
+        () =>
+            findOneAndUpdateOrThrow(
+                Offer,
+                { _id: data.id, owner: data.user._id },
+                OFFER,
+                updateFields,
+                replaceOptions,
+                populate
+            )
     );
 
-    // Si tout s'est bien passé, on supprime l'ancienne image
+    // Si tout s'est bien passé, on supprime les anciennes images
     await safeRemoveImage(
         offerBeforeUpdate.image.public_id,
-        undefined,
         'Failed removing old image'
+    );
+    await Promise.all(
+        offerBeforeUpdate.pictures.map((picture) =>
+            safeRemoveImage(picture.public_id, 'Failed removing old picture')
+        )
     );
 
     return toOfferDTO({ ...offerBeforeUpdate.toObject(), ...updateFields });
@@ -243,6 +286,7 @@ const updatePartial = async (data) => {
     if (hasBody) {
         data.body = assertValid(offerBodyPartialSchema, data.body);
     }
+    assertPictureCountWithinLimit(data.files);
 
     const offerToUpdate = await findOneOrThrow(
         Offer,
@@ -264,13 +308,27 @@ const updatePartial = async (data) => {
         }
     }
 
-    let cloudinaryResponse;
-    if (hasFiles) {
-        cloudinaryResponse = await uploadImage(data.files, data.id);
-        updateFields.image = cloudinaryResponse;
+    // Chaque fichier est indépendant : envoyer "pictures" sans "picture" (ou
+    // l'inverse) ne touche que le champ concerné, comme les champs body.
+    const hasNewImage = hasFiles && !!data.files.picture;
+    const hasNewPictures = hasFiles && !!data.files.pictures;
+    const uploadedImages = [];
+
+    if (hasNewImage) {
+        const image = await uploadImage(data.files, data.id);
+        updateFields.image = image;
+        uploadedImages.push(image);
     }
 
-    const updatedOffer = await withImageRollback(cloudinaryResponse, () =>
+    if (hasNewPictures) {
+        const pictures = await withImageRollback(uploadedImages, () =>
+            uploadImages(data.files, data.id)
+        );
+        updateFields.pictures = pictures;
+        uploadedImages.push(...pictures);
+    }
+
+    const updatedOffer = await withImageRollback(uploadedImages, () =>
         findByIdAndUpdateOrThrow(
             Offer,
             data.id,
@@ -281,12 +339,18 @@ const updatePartial = async (data) => {
         )
     );
 
-    // Si tout s'est bien passé, on supprime l'ancienne image
-    if (cloudinaryResponse !== undefined) {
+    // Si tout s'est bien passé, on supprime les anciennes images remplacées
+    if (hasNewImage) {
         await safeRemoveImage(
             offerToUpdate.image.public_id,
-            undefined,
             'Failed removing old image'
+        );
+    }
+    if (hasNewPictures) {
+        await Promise.all(
+            offerToUpdate.pictures.map((picture) =>
+                safeRemoveImage(picture.public_id, 'Failed removing old picture')
+            )
         );
     }
 
@@ -305,12 +369,15 @@ const remove = async (data) => {
         populate
     );
 
-    // Si tout s'est bien passé, on supprime les images du dossier et le dossier lui-même dans Cloudinary
-    await safeRemoveImage(
-        removedOffer.image.public_id,
-        removedOffer._id,
-        'Failed removing image'
+    // Si tout s'est bien passé, on supprime les images du dossier, puis le
+    // dossier lui-même (Cloudinary exige qu'il soit vide) dans Cloudinary
+    await safeRemoveImage(removedOffer.image.public_id, 'Failed removing image');
+    await Promise.all(
+        removedOffer.pictures.map((picture) =>
+            safeRemoveImage(picture.public_id, 'Failed removing picture')
+        )
     );
+    await safeDeleteOfferFolder(removedOffer._id);
 
     return toOfferDTO(removedOffer);
 };

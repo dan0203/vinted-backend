@@ -1,6 +1,7 @@
 const request = require('supertest');
 const app = require('../app');
 const { connect, clearDatabase, closeDatabase } = require('./setupTestDb');
+const cloudinary = require('../utils/cloudinary');
 
 // Le picture est obligatoire au publish/update : on mocke Cloudinary pour ne
 // pas dépendre du réseau ni de vrais credentials pendant les tests.
@@ -9,13 +10,38 @@ jest.mock('../utils/cloudinary', () => ({
         public_id: 'vinted/offers/fake',
         secure_url: 'https://res.cloudinary.com/fake/image/upload/fake.jpg',
     }),
+    // Reflète le nombre de fichiers "pictures" envoyés, pour que les tests
+    // multi-images puissent vérifier response.body.pictures.length.
+    uploadImages: jest.fn().mockImplementation((files) => {
+        if (!files || !files.pictures) return Promise.resolve([]);
+        const pictureFiles = Array.isArray(files.pictures)
+            ? files.pictures
+            : [files.pictures];
+        return Promise.resolve(
+            pictureFiles.map((_, index) => ({
+                public_id: `vinted/offers/fake-picture-${index}`,
+                secure_url: `https://res.cloudinary.com/fake/image/upload/fake-picture-${index}.jpg`,
+            }))
+        );
+    }),
     removeImage: jest.fn().mockResolvedValue(undefined),
+    deleteOfferFolder: jest.fn().mockResolvedValue(undefined),
 }));
 
 // Un petit buffer suffit : express-fileupload n'a besoin que d'un fichier
 // présent sous le champ "picture", son contenu n'est jamais lu par le mock.
 const attachPicture = (req) =>
     req.attach('picture', Buffer.from('fake-image'), 'picture.jpg');
+
+// Attache `count` fichiers sous le champ "pictures" : express-fileupload les
+// regroupe automatiquement en tableau quand plusieurs fichiers partagent le
+// même nom de champ.
+const attachPictures = (req, count) => {
+    for (let i = 0; i < count; i++) {
+        req.attach('pictures', Buffer.from(`fake-image-${i}`), `picture-${i}.jpg`);
+    }
+    return req;
+};
 
 let token;
 
@@ -77,6 +103,49 @@ describe('POST /offers/publish', () => {
             .set('Authorization', `Bearer ${token}`)
             .field('description', 'Good condition')
             .field('price', '25');
+
+        expect(response.status).toBe(400);
+    });
+
+    it('publishes an offer with secondary pictures', async () => {
+        const response = await attachPictures(
+            attachPicture(
+                request(app)
+                    .post('/offers/publish')
+                    .set('Authorization', `Bearer ${token}`)
+                    .field('title', 'Vintage jacket')
+                    .field('description', 'Good condition, worn a few times')
+                    .field('price', '25')
+                    .field('brand', "Levi's")
+                    .field('size', 'M')
+                    .field('color', 'Blue')
+                    .field('condition', 'Good')
+                    .field('city', 'Paris')
+            ),
+            3
+        );
+
+        expect(response.status).toBe(201);
+        expect(response.body.pictures).toHaveLength(3);
+    });
+
+    it('rejects more than the max number of secondary pictures', async () => {
+        const response = await attachPictures(
+            attachPicture(
+                request(app)
+                    .post('/offers/publish')
+                    .set('Authorization', `Bearer ${token}`)
+                    .field('title', 'Vintage jacket')
+                    .field('description', 'Good condition, worn a few times')
+                    .field('price', '25')
+                    .field('brand', "Levi's")
+                    .field('size', 'M')
+                    .field('color', 'Blue')
+                    .field('condition', 'Good')
+                    .field('city', 'Paris')
+            ),
+            6
+        );
 
         expect(response.status).toBe(400);
     });
@@ -315,6 +384,43 @@ describe('PATCH /offers/:id', () => {
         expect(details.condition).toBe('Good');
         expect(details.city).toBe('Paris');
     });
+
+    it('replaces the whole set of secondary pictures when "pictures" is sent', async () => {
+        const firstResponse = await attachPictures(
+            request(app)
+                .patch(`/offers/${offerId}`)
+                .set('Authorization', `Bearer ${token}`),
+            2
+        );
+        expect(firstResponse.status).toBe(200);
+        expect(firstResponse.body.pictures).toHaveLength(2);
+
+        const secondResponse = await attachPictures(
+            request(app)
+                .patch(`/offers/${offerId}`)
+                .set('Authorization', `Bearer ${token}`),
+            1
+        );
+        expect(secondResponse.status).toBe(200);
+        expect(secondResponse.body.pictures).toHaveLength(1);
+    });
+
+    it('leaves pictures untouched when "pictures" is not sent', async () => {
+        await attachPictures(
+            request(app)
+                .patch(`/offers/${offerId}`)
+                .set('Authorization', `Bearer ${token}`),
+            2
+        );
+
+        const response = await request(app)
+            .patch(`/offers/${offerId}`)
+            .set('Authorization', `Bearer ${token}`)
+            .field('price', '35');
+
+        expect(response.status).toBe(200);
+        expect(response.body.pictures).toHaveLength(2);
+    });
 });
 
 describe('DELETE /offers/:id', () => {
@@ -360,5 +466,42 @@ describe('DELETE /offers/:id', () => {
             .set('Authorization', `Bearer ${token}`);
 
         expect(response.status).toBe(200);
+    });
+
+    it('cleans up the main image, all secondary pictures and the folder', async () => {
+        const publishResponse = await attachPictures(
+            attachPicture(
+                request(app)
+                    .post('/offers/publish')
+                    .set('Authorization', `Bearer ${token}`)
+                    .field('title', 'Vintage jacket')
+                    .field('description', 'Good condition')
+                    .field('price', '25')
+                    .field('brand', "Levi's")
+                    .field('size', 'M')
+                    .field('color', 'Blue')
+                    .field('condition', 'Good')
+                    .field('city', 'Paris')
+            ),
+            2
+        );
+        const offerWithPicturesId = publishResponse.body._id;
+
+        const removeImageCallsBefore = cloudinary.removeImage.mock.calls.length;
+        const deleteFolderCallsBefore =
+            cloudinary.deleteOfferFolder.mock.calls.length;
+
+        const response = await request(app)
+            .delete(`/offers/${offerWithPicturesId}`)
+            .set('Authorization', `Bearer ${token}`);
+
+        expect(response.status).toBe(200);
+        // 1 image principale + 2 pictures
+        expect(cloudinary.removeImage.mock.calls.length).toBe(
+            removeImageCallsBefore + 3
+        );
+        expect(cloudinary.deleteOfferFolder.mock.calls.length).toBe(
+            deleteFolderCallsBefore + 1
+        );
     });
 });
