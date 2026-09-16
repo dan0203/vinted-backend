@@ -39,12 +39,13 @@ const {
 } = require('../utils/constants');
 const {
     findByIdOrThrow,
-    findByIdAndDeleteOrThrow,
-    findAll,
     findByIdAndUpdateOrThrow,
+    findAll,
+    findOneOrThrow,
+    findOneAndUpdateOrThrow,
+    findOneAndDeleteOrThrow,
     save,
 } = require('../utils/mongooseOrThrow');
-const findOwnedOfferOrThrow = require('../utils/findOwnedOfferOrThrow');
 
 // Dans ce service, la validation des données se fait manuellement, comparé à user service qui utilise le package Joi
 
@@ -107,20 +108,107 @@ const baseOfferFields = [
     },
 ];
 
+const partialOfferFields = baseOfferFields
+    .filter((field) => field.source === FIELD_SOURCE_BODY)
+    .map((field) => ({ ...field, required: false }));
+
 const populate = {
     path: 'owner',
     select: '_id account',
 };
-const publishOrUpdateOptions = {
+const replaceOptions = {
+    // On a besoin du document AVANT écriture pour connaître l'ancienne image
+    // à supprimer sur Cloudinary, tout en gardant une écriture atomique.
+    returnDocument: 'before',
+    runValidators: true,
+};
+const partialUpdateOptions = {
     returnDocument: 'after',
     runValidators: true,
 };
 
-const publish = async (data) => {
-    const fields = [...baseOfferFields];
-    assertCorrectData(data, fields);
+const detailKeyByFieldName = {
+    brand: 'MARQUE',
+    size: 'TAILLE',
+    color: 'COULEUR',
+    condition: 'ÉTAT',
+    city: 'EMPLACEMENT',
+};
 
-    const price = data.body.price;
+// Construit le tableau product_details à partir des champs du body
+function buildProductDetails(body) {
+    return Object.entries(detailKeyByFieldName).map(([fieldName, key]) => ({
+        [key]: body[fieldName],
+    }));
+}
+
+// Fusionne les détails existants avec les champs présents (et non vides) du body.
+// Renvoie `undefined` si aucun champ pertinent n'a été fourni.
+function mergeProductDetails(existingDetails, body) {
+    const changedEntries = Object.entries(detailKeyByFieldName).filter(
+        ([fieldName]) =>
+            body[fieldName] !== undefined && body[fieldName].trim() !== ''
+    );
+
+    if (changedEntries.length === 0) return undefined;
+
+    const details = [...existingDetails];
+
+    changedEntries.forEach(([fieldName, key]) => {
+        const value = body[fieldName];
+        const index = details.findIndex((detail) => key in detail);
+        if (index !== -1) {
+            details[index] = { [key]: value };
+        } else {
+            details.push({ [key]: value });
+        }
+    });
+
+    return details;
+}
+
+// Forme unique et complète renvoyée par toutes les méthodes du service
+function toOfferDTO(offer) {
+    return {
+        _id: offer._id,
+        product_name: offer.product_name,
+        product_description: offer.product_description,
+        product_price: offer.product_price,
+        product_details: offer.product_details,
+        product_pictures: offer.product_pictures,
+        product_image: offer.product_image,
+        product_date: offer.product_date,
+        owner: offer.owner,
+    };
+}
+
+// Log non bloquant : on ne fait jamais échouer une opération réussie en DB
+// à cause d'un nettoyage Cloudinary qui échoue derrière.
+async function safeRemoveImage(publicId, folderId, logLabel) {
+    if (!publicId) return;
+
+    try {
+        await removeImage(publicId, folderId);
+    } catch (error) {
+        console.error(logLabel, error.error?.message || error.message || error);
+    }
+}
+
+// Si `operation` échoue, on supprime l'image qu'on venait d'uploader
+// pour ne pas laisser d'image orpheline sur Cloudinary.
+async function withImageRollback(cloudinaryResponse, operation) {
+    try {
+        return await operation();
+    } catch (error) {
+        if (cloudinaryResponse?.public_id) {
+            await removeImage(cloudinaryResponse.public_id);
+        }
+        throw error;
+    }
+}
+
+const publish = async (data) => {
+    assertCorrectData(data, baseOfferFields, OFFER);
 
     // On génère un id MongoDB pour le chemin de stockage de l'image dans cloudinary
     const newOfferId = new mongoose.Types.ObjectId();
@@ -131,43 +219,26 @@ const publish = async (data) => {
         _id: newOfferId,
         product_name: data.body.title,
         product_description: data.body.description,
-        product_price: price,
-        product_details: [
-            {
-                MARQUE: data.body.brand,
-            },
-            {
-                TAILLE: data.body.size,
-            },
-            {
-                COULEUR: data.body.color,
-            },
-            {
-                ÉTAT: data.body.condition,
-            },
-            {
-                EMPLACEMENT: data.body.city,
-            },
-        ],
+        product_price: data.body.price,
+        product_details: buildProductDetails(data.body),
         product_image: cloudinaryResponse,
         product_pictures: [], // Si besoin d'uploader plusieurs images
         owner: data.user._id,
     });
 
-    let publishedOffer;
-    try {
-        publishedOffer = await save(newOffer, populate);
-    } catch (error) {
-        if (cloudinaryResponse?.public_id) {
-            await removeImage(cloudinaryResponse.public_id);
-        }
+    const publishedOffer = await withImageRollback(cloudinaryResponse, () =>
+        save(newOffer, populate)
+    );
 
-        throw error;
-    }
-
-    return publishedOffer;
+    return toOfferDTO(publishedOffer);
 };
 
+// Remplacement complet d'une offre (PUT) : tous les champs sont requis.
+// La vérification de propriété et l'écriture sont faites en une seule requête
+// atomique (filtre { _id, owner }) pour éviter tout TOCTOU entre les deux ;
+// en contrepartie, une offre existante appartenant à un autre utilisateur
+// renvoie 404 (comme une offre inexistante) plutôt que 403, afin de ne pas
+// révéler son existence.
 const update = async (data) => {
     const fields = [
         ...baseOfferFields,
@@ -180,80 +251,42 @@ const update = async (data) => {
     ];
     assertCorrectData(data, fields, OFFER);
 
-    const offerToUpdate = await findOwnedOfferOrThrow(data.id, data.user._id);
-
-    const price = data.body.price;
-
     const cloudinaryResponse = await uploadImage(data.files, data.id);
 
     const updateFields = {
         product_name: data.body.title,
         product_description: data.body.description,
-        product_price: price,
-        product_details: [
-            {
-                MARQUE: data.body.brand,
-            },
-            {
-                TAILLE: data.body.size,
-            },
-            {
-                COULEUR: data.body.color,
-            },
-            {
-                ÉTAT: data.body.condition,
-            },
-            {
-                EMPLACEMENT: data.body.city,
-            },
-        ],
+        product_price: data.body.price,
+        product_details: buildProductDetails(data.body),
         product_image: cloudinaryResponse,
         product_pictures: [], // Si besoin d'uploader plusieurs images
-        owner: data.user._id,
     };
 
-    let updatedOffer;
-    try {
-        updatedOffer = await findByIdAndUpdateOrThrow(
+    const offerBeforeUpdate = await withImageRollback(cloudinaryResponse, () =>
+        findOneAndUpdateOrThrow(
             Offer,
-            data.id,
+            { _id: data.id, owner: data.user._id },
             OFFER,
             updateFields,
-            publishOrUpdateOptions,
+            replaceOptions,
             populate
-        );
-    } catch (error) {
-        if (cloudinaryResponse?.public_id) {
-            await removeImage(cloudinaryResponse.public_id);
-        }
-
-        throw error;
-    }
-
-    const updatedOfferToReturn = {
-        product_name: updatedOffer.product_name,
-        product_description: updatedOffer.product_description,
-        product_price: updatedOffer.product_price,
-        product_details: updatedOffer.product_details,
-        product_image: updatedOffer.product_image,
-        owner: updatedOffer.owner,
-    };
+        )
+    );
 
     // Si tout s'est bien passé, on supprime l'ancienne image
-    if (offerToUpdate.product_image.public_id) {
-        try {
-            await removeImage(offerToUpdate.product_image.public_id);
-        } catch (error) {
-            console.error(
-                'Failed removing old image',
-                error.error?.message || error.message || error
-            );
-        }
-    }
+    await safeRemoveImage(
+        offerBeforeUpdate.product_image.public_id,
+        undefined,
+        'Failed removing old image'
+    );
 
-    return updatedOfferToReturn;
+    return toOfferDTO({ ...offerBeforeUpdate.toObject(), ...updateFields });
 };
 
+// Mise à jour partielle (PATCH) : nécessite de connaître le product_details
+// existant pour y fusionner les champs modifiés, d'où une lecture préalable
+// (scopée par owner) avant l'écriture. Contrairement à update(), on ne peut
+// pas rendre cette opération atomique en une seule requête.
 const updatePartial = async (data) => {
     const hasBody = !!data.body;
     const hasFiles = !!data.files;
@@ -269,75 +302,25 @@ const updatePartial = async (data) => {
             required: true,
             source: FIELD_SOURCE_PARAMS,
         },
+        ...(hasBody ? partialOfferFields : []),
+        ...(hasFiles
+            ? [
+                  {
+                      name: FIELD_NAME_PICTURE,
+                      type: FIELD_TYPE_FILE,
+                      required: false,
+                      source: FIELD_SOURCE_FILES,
+                  },
+              ]
+            : []),
     ];
-
-    if (hasBody) {
-        fields.push(
-            {
-                name: FIELD_NAME_TITLE,
-                type: FIELD_TYPE_STRING,
-                required: false,
-                source: FIELD_SOURCE_BODY,
-            },
-            {
-                name: FIELD_NAME_DESCRIPTION,
-                type: FIELD_TYPE_STRING,
-                required: false,
-                source: FIELD_SOURCE_BODY,
-            },
-            {
-                name: FIELD_NAME_PRICE,
-                type: FIELD_TYPE_NUMBER,
-                min: MIN_PRICE,
-                exclusiveMin: true,
-                required: false,
-                source: FIELD_SOURCE_BODY,
-            },
-            {
-                name: FIELD_NAME_CONDITION,
-                type: FIELD_TYPE_STRING,
-                required: false,
-                source: FIELD_SOURCE_BODY,
-            },
-            {
-                name: FIELD_NAME_CITY,
-                type: FIELD_TYPE_STRING,
-                required: false,
-                source: FIELD_SOURCE_BODY,
-            },
-            {
-                name: FIELD_NAME_BRAND,
-                type: FIELD_TYPE_STRING,
-                required: false,
-                source: FIELD_SOURCE_BODY,
-            },
-            {
-                name: FIELD_NAME_SIZE,
-                type: FIELD_TYPE_STRING,
-                required: false,
-                source: FIELD_SOURCE_BODY,
-            },
-            {
-                name: FIELD_NAME_COLOR,
-                type: FIELD_TYPE_STRING,
-                required: false,
-                source: FIELD_SOURCE_BODY,
-            }
-        );
-    }
-
-    if (hasFiles) {
-        fields.push({
-            name: FIELD_NAME_PICTURE,
-            type: FIELD_TYPE_FILE,
-            required: false,
-            source: FIELD_SOURCE_FILES,
-        });
-    }
-
     assertCorrectData(data, fields, OFFER);
 
-    const offerToUpdate = await findOwnedOfferOrThrow(data.id, data.user._id);
+    const offerToUpdate = await findOneOrThrow(
+        Offer,
+        { _id: data.id, owner: data.user._id },
+        OFFER
+    );
 
     const updateFields = {};
 
@@ -349,131 +332,67 @@ const updatePartial = async (data) => {
         if (data.body.price !== undefined)
             updateFields.product_price = data.body.price;
 
-        const product_details = [...offerToUpdate.product_details];
-
-        const fieldToKey = {
-            brand: 'MARQUE',
-            size: 'TAILLE',
-            color: 'COULEUR',
-            condition: 'ÉTAT',
-            city: 'EMPLACEMENT',
-        };
-
-        const upsertDetail = (details, key, value) => {
-            const index = details.findIndex((d) => key in d);
-            if (index !== -1) {
-                details[index] = { [key]: value };
-            } else {
-                details.push({ [key]: value });
-            }
-        };
-
-        let hasChangedProductDetails = false;
-
-        Object.keys(fieldToKey).forEach((key) => {
-            if (data.body[key] !== undefined && data.body[key].trim() !== '') {
-                upsertDetail(product_details, fieldToKey[key], data.body[key]);
-                hasChangedProductDetails = true;
-            }
-        });
-
-        if (hasChangedProductDetails)
+        const product_details = mergeProductDetails(
+            offerToUpdate.product_details,
+            data.body
+        );
+        if (product_details !== undefined) {
             updateFields.product_details = product_details;
+        }
     }
 
     let cloudinaryResponse;
     if (hasFiles) {
         cloudinaryResponse = await uploadImage(data.files, data.id);
-
         updateFields.product_image = cloudinaryResponse;
     }
 
-    let updatedOffer;
-    try {
-        updatedOffer = await findByIdAndUpdateOrThrow(
+    const updatedOffer = await withImageRollback(cloudinaryResponse, () =>
+        findByIdAndUpdateOrThrow(
             Offer,
             data.id,
             OFFER,
             updateFields,
-            publishOrUpdateOptions,
+            partialUpdateOptions,
             populate
-        );
-    } catch (error) {
-        if (cloudinaryResponse?.public_id) {
-            await removeImage(cloudinaryResponse.public_id);
-        }
-
-        throw error;
-    }
-
-    const updatedOfferToReturn = {
-        product_name: updatedOffer.product_name,
-        product_description: updatedOffer.product_description,
-        product_price: updatedOffer.product_price,
-        product_details: updatedOffer.product_details,
-        product_image: updatedOffer.product_image,
-        owner: updatedOffer.owner,
-    };
+        )
+    );
 
     // Si tout s'est bien passé, on supprime l'ancienne image
-    if (
-        cloudinaryResponse !== undefined &&
-        offerToUpdate.product_image.public_id
-    ) {
-        try {
-            await removeImage(offerToUpdate.product_image.public_id);
-        } catch (error) {
-            console.error(
-                'Failed removing old image',
-                error.error?.message || error.message || error
-            );
-        }
+    if (cloudinaryResponse !== undefined) {
+        await safeRemoveImage(
+            offerToUpdate.product_image.public_id,
+            undefined,
+            'Failed removing old image'
+        );
     }
 
-    return updatedOfferToReturn;
+    return toOfferDTO(updatedOffer);
 };
 
+// La vérification de propriété et la suppression sont faites en une seule
+// requête atomique, voir le commentaire de update() ci-dessus.
 const remove = async (data) => {
     const fields = [
         { name: 'id', type: FIELD_TYPE_OBJECTID, source: FIELD_SOURCE_PARAMS },
     ];
     assertCorrectData(data, fields, OFFER);
 
-    await findOwnedOfferOrThrow(data.id, data.user._id);
-
-    const removedOffer = await findByIdAndDeleteOrThrow(
+    const removedOffer = await findOneAndDeleteOrThrow(
         Offer,
-        data.id,
+        { _id: data.id, owner: data.user._id },
         OFFER,
         populate
     );
 
     // Si tout s'est bien passé, on supprime les images du dossier et le dossier lui-même dans Cloudinary
-    if (removedOffer.product_image.public_id) {
-        try {
-            await removeImage(
-                removedOffer.product_image.public_id,
-                removedOffer._id
-            );
-        } catch (error) {
-            console.error(
-                'Failed removing image',
-                error.error?.message || error.message || error
-            );
-        }
-    }
+    await safeRemoveImage(
+        removedOffer.product_image.public_id,
+        removedOffer._id,
+        'Failed removing image'
+    );
 
-    return {
-        _id: removedOffer._id,
-        product_name: removedOffer.product_name,
-        product_description: removedOffer.product_description,
-        product_price: removedOffer.product_price,
-        product_details: removedOffer.product_details,
-        product_pictures: removedOffer.product_pictures,
-        product_image: removedOffer.product_image,
-        product_date: removedOffer.product_date,
-        owner: removedOffer.owner,
-    };
+    return toOfferDTO(removedOffer);
 };
 
 const getAll = async (data) => {
@@ -523,8 +442,7 @@ const getAll = async (data) => {
     }
 
     // Filtres priceMin et priceMax
-    const min = data.priceMin === undefined ? undefined : data.priceMin;
-    const max = data.priceMax === undefined ? undefined : data.priceMax;
+    const { priceMin: min, priceMax: max } = data;
 
     if (min !== undefined && max !== undefined && min > max) {
         throwError('priceMin cannot be greater than priceMax', 400);
@@ -572,17 +490,7 @@ const getOne = async (data) => {
 
     const offer = await findByIdOrThrow(Offer, data.id, OFFER, populate);
 
-    return {
-        _id: offer._id,
-        product_name: offer.product_name,
-        product_description: offer.product_description,
-        product_price: offer.product_price,
-        product_details: offer.product_details,
-        product_pictures: offer.product_pictures,
-        product_image: offer.product_image,
-        product_date: offer.product_date,
-        owner: offer.owner,
-    };
+    return toOfferDTO(offer);
 };
 
 module.exports = { getAll, publish, update, updatePartial, remove, getOne };

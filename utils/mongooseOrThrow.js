@@ -37,21 +37,6 @@ async function findAll(
     return [results, count];
 }
 
-async function findByIdAndDeleteOrThrow(Model, id, resourceLabel, populate) {
-    let query = Model.findByIdAndDelete(id);
-    if (populate) {
-        query = query.populate(populate);
-    }
-
-    const doc = await query;
-
-    if (!doc) {
-        throwError(`${capitalize(resourceLabel)} does not exist`, 404);
-    }
-
-    return doc;
-}
-
 async function findByIdAndUpdateOrThrow(
     Model,
     id,
@@ -140,7 +125,6 @@ async function findOneAndDeleteOrThrow(Model, filter, resourceLabel, populate) {
 module.exports = {
     findByIdOrThrow,
     findAll,
-    findByIdAndDeleteOrThrow,
     findByIdAndUpdateOrThrow,
     save,
     findOneOrThrow,

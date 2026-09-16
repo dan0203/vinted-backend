@@ -148,7 +148,11 @@ const testsCommonToUpdateMethods = (method, getOfferId, attachFields) => {
         expect(response.status).toBe(401);
     });
 
-    it('refuses an update by a user who is not the owner', async () => {
+    // L'ownership check et l'écriture sont faites en une seule requête atomique
+    // ({_id, owner}) : une offre existante mais qui n'appartient pas à
+    // l'utilisateur est donc indistinguable d'une offre inexistante (404),
+    // pour ne pas révéler son existence à un tiers.
+    it('returns 404 for an update by a user who is not the owner', async () => {
         const otherSignup = await request(app).post('/users/signup').send({
             email: 'other@example.com',
             password: 'secret123',
@@ -161,7 +165,7 @@ const testsCommonToUpdateMethods = (method, getOfferId, attachFields) => {
                 .set('Authorization', `Bearer ${otherSignup.body.token}`)
         );
 
-        expect(response.status).toBe(403);
+        expect(response.status).toBe(404);
     });
 
     it('returns 404 for a well-formed but non-existent id', async () => {
@@ -333,7 +337,10 @@ describe('DELETE /offers/:id', () => {
         offerId = publishResponse.body._id;
     });
 
-    it('refuses deletion by a user who is not the owner', async () => {
+    // Voir le commentaire équivalent dans testsCommonToUpdateMethods : 404 et
+    // non 403, l'ownership check et la suppression étant une seule requête
+    // atomique ({_id, owner}).
+    it('returns 404 for a deletion by a user who is not the owner', async () => {
         const otherSignup = await request(app).post('/users/signup').send({
             email: 'other@example.com',
             password: 'secret123',
@@ -344,7 +351,7 @@ describe('DELETE /offers/:id', () => {
             .delete(`/offers/${offerId}`)
             .set('Authorization', `Bearer ${otherSignup.body.token}`);
 
-        expect(response.status).toBe(403);
+        expect(response.status).toBe(404);
     });
 
     it('allows the owner to delete their own offer', async () => {
