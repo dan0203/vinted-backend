@@ -33,7 +33,7 @@ Aucune démo n'est actuellement déployée ; voir [Démarrage](#démarrage) pour
 
 - **Authentification** : inscription et connexion avec mot de passe hashé (bcrypt) et token Bearer délivré à la connexion.
 - **Autorisation** : seul le propriétaire d'une annonce peut la modifier ou la supprimer.
-- **Annonces** : publication, modification et suppression d'une annonce, avec une photo hébergée sur Cloudinary.
+- **Annonces** : publication, remplacement complet (PUT) ou modification partielle (PATCH), et suppression d'une annonce, avec une photo principale et jusqu'à 5 photos secondaires hébergées sur Cloudinary.
 - **Recherche & filtres** : filtrage par titre (insensible à la casse, protégé contre le ReDoS), par fourchette de prix, tri par prix (croissant/décroissant), pagination.
 - **Gestion d'erreurs centralisée** : chaque erreur porte un statut HTTP et un message JSON ; les erreurs internes inattendues sont journalisées côté serveur mais ne fuitent jamais leurs détails au client.
 
@@ -43,7 +43,7 @@ Aucune démo n'est actuellement déployée ; voir [Démarrage](#démarrage) pour
 | --------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------- |
 | Runtime / framework   | Node.js, Express 5 (routing, middlewares)                                                                                                                |
 | Base de données / ODM | MongoDB, Mongoose                                                                                                                                        |
-| Validation            | [Joi](https://joi.dev/) (validation par schéma, routes `user`) + validation manuelle (routes `offer`)                                                    |
+| Validation            | [Joi](https://joi.dev/) (validation par schéma, toutes les routes)                                                                                       |
 | Authentification      | Auth par token Bearer maison, [bcryptjs](https://github.com/dcodeIO/bcrypt.js) pour le hachage des mots de passe, `uid2` pour la génération de token/sel |
 | Upload de fichiers    | [express-fileupload](https://github.com/richardgirges/express-fileupload) + [Cloudinary](https://cloudinary.com/) pour l'hébergement d'images            |
 | Outillage             | ESLint + Prettier, CI GitHub Actions (lint à chaque push/PR)                                                                                             |
@@ -52,20 +52,21 @@ _(Les paquets utilitaires comme `cors` et `dotenv` servent à la configuration s
 
 ## Référence de l'API
 
-URL de base : `http://localhost:3000` (ou le `PORT` configuré). Tous les corps de requête/réponse sont en JSON, sauf `publish`/`update` qui attendent du `multipart/form-data` (même sans photo, car les champs texte doivent arriver en tant que chaînes pour que la validation manuelle fonctionne).
+URL de base : `http://localhost:3000` (ou le `PORT` configuré). Tous les corps de requête/réponse sont en JSON, sauf `publish`/`PUT`/`PATCH` qui attendent du `multipart/form-data` (nécessaire pour l'upload de fichiers, même sur les requêtes qui n'envoient que des champs texte).
 
 Les routes authentifiées attendent un header `Authorization: Bearer <token>`, avec le token renvoyé par l'inscription/connexion.
 
-| Méthode | Route             | Auth                         | Description                                                                                                                                                                                       |
-| ------- | ----------------- | ---------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| POST    | `/users/signup`   | —                            | Créer un compte. Corps : `email`, `password` (6 caractères min.), `username`, `newsletter` (optionnel).                                                                                           |
-| POST    | `/users/login`    | —                            | Se connecter. Corps : `email`, `password`.                                                                                                                                                        |
-| GET     | `/users/:id`      | —                            | Récupérer le profil public d'un utilisateur (`_id`, `account.username`, `account.avatar`, `newsletter`).                                                                                          |
-| POST    | `/offers/publish` | ✅                           | Publier une annonce. `multipart/form-data` : `title`, `description`, `price`, `brand`, `size`, `color`, `condition`, `city`, et un fichier `picture` optionnel.                                   |
-| GET     | `/offers`         | —                            | Lister les annonces. Paramètres de requête : `title`, `priceMin`, `priceMax`, `sort` (`price-asc` \| `price-desc`, croissant par défaut), `page` (défaut 1, 20 par page).                         |
-| GET     | `/offers/:id`     | —                            | Récupérer une annonce.                                                                                                                                                                            |
-| PUT     | `/offers/:id`     | ✅ (propriétaire uniquement) | Modifier une annonce. Même corps que `publish` — l'endpoint attend l'ensemble des champs, pas une mise à jour partielle (voir [Limitations connues](#limitations-connues--pistes-damélioration)). |
-| DELETE  | `/offers/:id`     | ✅ (propriétaire uniquement) | Supprimer une annonce et son image Cloudinary.                                                                                                                                                    |
+| Méthode | Route             | Auth                         | Description                                                                                                                                                                                          |
+| ------- | ----------------- | ---------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| POST    | `/users/signup`   | —                            | Créer un compte. Corps : `email`, `password` (6 caractères min.), `username`, `newsletter` (optionnel).                                                                                             |
+| POST    | `/users/login`    | —                            | Se connecter. Corps : `email`, `password`.                                                                                                                                                           |
+| GET     | `/users/:id`      | —                            | Récupérer le profil public d'un utilisateur (`_id`, `account.username`, `account.avatar`, `newsletter`).                                                                                            |
+| POST    | `/offers/publish` | ✅                           | Publier une annonce. `multipart/form-data` : `title`, `description`, `price`, `brand`, `size`, `color`, `condition`, `city`, un fichier `picture` obligatoire, et jusqu'à 5 fichiers `pictures` optionnels. |
+| GET     | `/offers`         | —                            | Lister les annonces. Paramètres de requête : `title`, `priceMin`, `priceMax`, `sort` (`price-asc` \| `price-desc`, croissant par défaut), `page` (défaut 1, 20 par page).                           |
+| GET     | `/offers/:id`     | —                            | Récupérer une annonce.                                                                                                                                                                               |
+| PUT     | `/offers/:id`     | ✅ (propriétaire uniquement) | Remplacer une annonce. Même corps que `publish` — l'ensemble des champs est requis, `picture` inclus ; omettre `pictures` vide les images secondaires.                                              |
+| PATCH   | `/offers/:id`     | ✅ (propriétaire uniquement) | Modifier partiellement une annonce — n'envoyer que les champs à changer. `pictures`, si envoyé, remplace tout le lot d'images secondaires ; `picture` et `pictures` sont indépendants l'un de l'autre. |
+| DELETE  | `/offers/:id`     | ✅ (propriétaire uniquement) | Supprimer une annonce et toutes ses images Cloudinary.                                                                                                                                               |
 
 ### Exemples
 
@@ -85,7 +86,7 @@ curl -X POST http://localhost:3000/users/signup \
 }
 ```
 
-Publier une annonce (propriétaire uniquement, `multipart/form-data`) :
+Publier une annonce (propriétaire uniquement, `multipart/form-data` ; `pictures` peut être répété jusqu'à 5 fois pour les images secondaires) :
 
 ```bash
 curl -X POST http://localhost:3000/offers/publish \
@@ -98,7 +99,9 @@ curl -X POST http://localhost:3000/offers/publish \
   -F "color=Bleu" \
   -F "condition=Bon état" \
   -F "city=Paris" \
-  -F "picture=@veste.jpg"
+  -F "picture=@veste.jpg" \
+  -F "pictures=@veste-dos.jpg" \
+  -F "pictures=@veste-etiquette.jpg"
 ```
 
 Rechercher des annonces :
@@ -113,16 +116,20 @@ curl "http://localhost:3000/offers?title=veste&priceMin=10&priceMax=50&sort=pric
     "offers": [
         {
             "_id": "66f1a2b3c4d5e6f7a8b9c0d2",
-            "product_name": "Veste en jean vintage",
-            "product_price": 25,
-            "product_details": [
-                { "MARQUE": "Levi's" },
-                { "TAILLE": "M" },
-                { "COULEUR": "Bleu" },
-                { "ÉTAT": "Bon état" },
-                { "EMPLACEMENT": "Paris" }
+            "name": "Veste en jean vintage",
+            "price": 25,
+            "details": {
+                "brand": "Levi's",
+                "size": "M",
+                "color": "Bleu",
+                "condition": "Bon état",
+                "city": "Paris"
+            },
+            "image": { "secure_url": "https://res.cloudinary.com/..." },
+            "pictures": [
+                { "secure_url": "https://res.cloudinary.com/.../veste-dos.jpg" },
+                { "secure_url": "https://res.cloudinary.com/.../veste-etiquette.jpg" }
             ],
-            "product_image": { "secure_url": "https://res.cloudinary.com/..." },
             "owner": { "_id": "...", "account": { "username": "jane" } }
         }
     ]
@@ -166,19 +173,17 @@ Le serveur se connecte à MongoDB et à Cloudinary au démarrage, et refuse de d
 
 - Les mots de passe sont hashés avec **bcrypt** (10 tours de salage) — jamais stockés ni renvoyés en clair.
 - L'authentification repose sur un token opaque aléatoire (`uid2`), vérifié en base à chaque requête vers une route protégée, via le middleware `isAuthenticated`.
-- La propriété est vérifiée côté serveur : modifier ou supprimer une annonce vérifie que l'utilisateur authentifié en est bien le propriétaire, indépendamment de ce que le client affirme.
-- Joi (routes user) et des vérifications manuelles (routes offer) valident et nettoient les entrées avant qu'elles n'atteignent la base de données.
+- La propriété est vérifiée côté serveur, de façon atomique avec l'écriture elle-même (un seul `findOneAndUpdate`/`findOneAndDelete` filtré par `{ _id, owner }`) : une annonce qui existe mais appartient à quelqu'un d'autre renvoie `404`, comme une annonce inexistante, pour qu'un non-propriétaire ne puisse pas distinguer les deux cas.
+- Joi valide et nettoie les entrées de toutes les routes avant qu'elles n'atteignent la base de données.
 - L'endpoint de recherche par titre échappe les caractères spéciaux de regex avant de construire le pattern de recherche, fermant un vecteur de ReDoS (une chaîne fournie par l'utilisateur, utilisée telle quelle comme source de regex, peut déclencher un backtracking catastrophique).
 - Le gestionnaire d'erreur global renvoie un message générique `Internal server error` pour les erreurs inattendues et journalise l'erreur réelle uniquement côté serveur — aucune stack trace ni détail interne ne fuite jamais au client.
 - Les champs de réponse Cloudinary potentiellement sensibles (comme `api_key`) sont volontairement exclus du schéma d'image stocké.
 
 ## Limitations connues / pistes d'amélioration
 
-- **PUT vs PATCH** : `update` exige actuellement l'ensemble des champs, ce qui correspond à un frontend qui envoie toujours un formulaire complet pré-rempli (le cas ici). Si un futur client doit pouvoir modifier un seul champ (ex. juste le prix) sans renvoyer tout le formulaire, cet endpoint devrait passer en `PATCH` avec une sémantique de mise à jour partielle.
 - **CORS / taille des payloads** : `cors()` accepte actuellement n'importe quelle origine, et `express.json()` n'a pas de limite de taille explicite. C'est acceptable pour un projet démo/portfolio, mais un déploiement en production devrait restreindre CORS à des origines précises et plafonner la taille des requêtes.
-- **Couverture de tests partielle** : une suite Jest/Supertest (20 tests) couvre les routes `user` et `offers` — inscription/connexion, vérifications de propriété, filtrage, erreurs de validation — avec une instance MongoDB isolée en mémoire (`mongodb-memory-server`), sans aucune base de test partagée. Non couverts pour l'instant : l'upload Cloudinary lui-même (les tests exercent `publish`/`update` sans joindre de photo) et le flux de modification (`PUT`).
-- **Indexation partielle** : `product_price` a désormais un index (ajouté pour accélérer le tri et le filtrage par fourchette de prix à mesure que le volume de données grandit). `product_name` n'en a pas — la recherche par titre utilise un regex non ancré et insensible à la casse (`new RegExp(escapeRegex(title), 'i')`), qu'un index classique ne peut pas accélérer. Une vraie solution serait un [index texte](https://www.mongodb.com/docs/manual/core/indexes/index-types/index-text/) MongoDB avec l'opérateur `$text`, ou un moteur de recherche dédié (Atlas Search) — un vrai changement d'implémentation, pas juste un index à ajouter.
-- **Une seule image par annonce** : le schéma prévoit un tableau `product_pictures` pour plusieurs images, mais il est actuellement toujours enregistré vide — seul le champ `product_image` est renseigné. L'upload multi-images n'est pas encore implémenté.
+- **Couverture de tests partielle** : une suite Jest/Supertest couvre les routes `user` et `offers` — inscription/connexion, vérifications de propriété, filtrage, erreurs de validation, le champ multi-images `pictures`, le nettoyage PUT/PATCH/DELETE — avec une instance MongoDB isolée en mémoire (`mongodb-memory-server`), sans aucune base de test partagée. Cloudinary lui-même est mocké (`utils/cloudinary.js`), donc les vrais appels réseau à l'API Cloudinary ne sont pas exercés.
+- **Indexation partielle** : `price` a désormais un index (ajouté pour accélérer le tri et le filtrage par fourchette de prix à mesure que le volume de données grandit). `name` n'en a pas — la recherche par titre utilise un regex non ancré et insensible à la casse (`new RegExp(escapeRegex(title), 'i')`), qu'un index classique ne peut pas accélérer. Une vraie solution serait un [index texte](https://www.mongodb.com/docs/manual/core/indexes/index-types/index-text/) MongoDB avec l'opérateur `$text`, ou un moteur de recherche dédié (Atlas Search) — un vrai changement d'implémentation, pas juste un index à ajouter.
 
 ## Historique du projet
 
@@ -186,7 +191,7 @@ Le serveur se connecte à MongoDB et à Cloudinary au démarrage, et refuse de d
 
 ## Projet lié
 
-[vinted-frontend](https://github.com/dan0203/vinted-frontend) est un client React construit sur ce même contrat d'API (`/users/*`, `/offers/*`) — à noter que son étape de paiement appelle directement l'endpoint de paiement partagé du Réacteur plutôt que ce backend, donc le flux de paiement n'est pas autoporté de bout en bout.
+[vinted-frontend](https://github.com/dan0203/vinted-frontend) est un client React construit à l'origine sur les routes `/users/*`/`/offers/*` de cette API — à noter que son étape de paiement appelle directement l'endpoint de paiement partagé du Réacteur plutôt que ce backend, donc le flux de paiement n'est pas autoporté de bout en bout. La forme des réponses `offers` a été renommée depuis (voir [Référence de l'API](#référence-de-lapi)) ; le frontend n'a pas encore été mis à jour en conséquence.
 
 ## Licence
 
