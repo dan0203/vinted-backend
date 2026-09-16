@@ -1,41 +1,21 @@
 // Modules npm
 const mongoose = require('mongoose');
+const Joi = require('joi');
 // Model
 const Offer = require('../models/Offer');
 // Utils
 const throwError = require('../utils/throwError');
 const escapeRegex = require('../utils/escapeRegex');
 const { uploadImage, removeImage } = require('../utils/cloudinary');
-const assertCorrectData = require('../utils/assertCorrectData');
+const joiObjectId = require('../utils/joiObjectId');
 const {
     MIN_PRICE,
     MIN_PRICEMIN,
     MIN_PRICEMAX,
     MIN_PAGE,
     OFFERS_PER_PAGE,
-    FIELD_TYPE_STRING,
-    FIELD_TYPE_NUMBER,
-    FIELD_TYPE_FILE,
-    FIELD_TYPE_OBJECTID,
-    FIELD_SOURCE_BODY,
-    FIELD_SOURCE_FILES,
-    FIELD_SOURCE_PARAMS,
-    FIELD_SOURCE_QUERY,
     FIELD_SORT_OPTIONS,
     OFFER,
-    FIELD_NAME_TITLE,
-    FIELD_NAME_DESCRIPTION,
-    FIELD_NAME_PRICE,
-    FIELD_NAME_CONDITION,
-    FIELD_NAME_CITY,
-    FIELD_NAME_BRAND,
-    FIELD_NAME_SIZE,
-    FIELD_NAME_COLOR,
-    FIELD_NAME_PICTURE,
-    FIELD_NAME_PRICEMIN,
-    FIELD_NAME_PRICEMAX,
-    FIELD_NAME_PAGE,
-    FIELD_NAME_SORT,
 } = require('../utils/constants');
 const {
     findByIdOrThrow,
@@ -47,70 +27,55 @@ const {
     save,
 } = require('../utils/mongooseOrThrow');
 
-// Dans ce service, la validation des données se fait manuellement, comparé à user service qui utilise le package Joi
+// Schémas Joi : les fichiers (`picture`) ne sont volontairement pas dedans,
+// Joi ne s'applique pas bien aux objets fichier d'express-fileupload. Leur
+// présence est déjà vérifiée par uploadImage() dans utils/cloudinary.js.
+const offerBodySchema = Joi.object({
+    title: Joi.string().trim().min(1).required(),
+    description: Joi.string().trim().min(1).required(),
+    price: Joi.number().greater(MIN_PRICE).required(),
+    condition: Joi.string().trim().min(1).required(),
+    city: Joi.string().trim().min(1).required(),
+    brand: Joi.string().trim().min(1).required(),
+    size: Joi.string().trim().min(1).required(),
+    color: Joi.string().trim().min(1).required(),
+});
 
-const baseOfferFields = [
-    {
-        name: FIELD_NAME_TITLE,
-        type: FIELD_TYPE_STRING,
-        required: true,
-        source: FIELD_SOURCE_BODY,
-    },
-    {
-        name: FIELD_NAME_DESCRIPTION,
-        type: FIELD_TYPE_STRING,
-        required: true,
-        source: FIELD_SOURCE_BODY,
-    },
-    {
-        name: FIELD_NAME_PRICE,
-        type: FIELD_TYPE_NUMBER,
-        min: MIN_PRICE,
-        exclusiveMin: true,
-        required: true,
-        source: FIELD_SOURCE_BODY,
-    },
-    {
-        name: FIELD_NAME_CONDITION,
-        type: FIELD_TYPE_STRING,
-        required: true,
-        source: FIELD_SOURCE_BODY,
-    },
-    {
-        name: FIELD_NAME_CITY,
-        type: FIELD_TYPE_STRING,
-        required: true,
-        source: FIELD_SOURCE_BODY,
-    },
-    {
-        name: FIELD_NAME_BRAND,
-        type: FIELD_TYPE_STRING,
-        required: true,
-        source: FIELD_SOURCE_BODY,
-    },
-    {
-        name: FIELD_NAME_SIZE,
-        type: FIELD_TYPE_STRING,
-        required: true,
-        source: FIELD_SOURCE_BODY,
-    },
-    {
-        name: FIELD_NAME_COLOR,
-        type: FIELD_TYPE_STRING,
-        required: true,
-        source: FIELD_SOURCE_BODY,
-    },
-    {
-        name: FIELD_NAME_PICTURE,
-        type: FIELD_TYPE_FILE,
-        required: true,
-        source: FIELD_SOURCE_FILES,
-    },
-];
+const offerBodyPartialSchema = Joi.object({
+    title: Joi.string().trim().min(1),
+    description: Joi.string().trim().min(1),
+    price: Joi.number().greater(MIN_PRICE),
+    condition: Joi.string().trim().min(1),
+    city: Joi.string().trim().min(1),
+    brand: Joi.string().trim().min(1),
+    size: Joi.string().trim().min(1),
+    color: Joi.string().trim().min(1),
+});
 
-const partialOfferFields = baseOfferFields
-    .filter((field) => field.source === FIELD_SOURCE_BODY)
-    .map((field) => ({ ...field, required: false }));
+const getAllQuerySchema = Joi.object({
+    title: Joi.string(),
+    priceMin: Joi.number().min(MIN_PRICEMIN),
+    priceMax: Joi.number().min(MIN_PRICEMAX),
+    page: Joi.number().integer().min(MIN_PAGE),
+    sort: Joi.string().valid(...FIELD_SORT_OPTIONS),
+});
+
+// Valide `value` contre `schema` et renvoie la version validée (avec les
+// conversions de type Joi, ex. "25" -> 25), ou lève une 400.
+function assertValid(schema, value) {
+    const { error, value: validated } = schema.validate(value);
+    if (error) {
+        throwError(error.details[0].message, 400);
+    }
+    return validated;
+}
+
+function assertValidOfferId(id) {
+    const { error } = joiObjectId().required().validate(id);
+    if (error) {
+        throwError('Invalid offer id', 400);
+    }
+}
 
 const populate = {
     path: 'owner',
@@ -195,7 +160,7 @@ async function withImageRollback(cloudinaryResponse, operation) {
 }
 
 const publish = async (data) => {
-    assertCorrectData(data, baseOfferFields, OFFER);
+    data.body = assertValid(offerBodySchema, data.body);
 
     // On génère un id MongoDB pour le chemin de stockage de l'image dans cloudinary
     const newOfferId = new mongoose.Types.ObjectId();
@@ -227,16 +192,8 @@ const publish = async (data) => {
 // renvoie 404 (comme une offre inexistante) plutôt que 403, afin de ne pas
 // révéler son existence.
 const update = async (data) => {
-    const fields = [
-        ...baseOfferFields,
-        {
-            name: 'id',
-            type: FIELD_TYPE_OBJECTID,
-            required: true,
-            source: FIELD_SOURCE_PARAMS,
-        },
-    ];
-    assertCorrectData(data, fields, OFFER);
+    assertValidOfferId(data.id);
+    data.body = assertValid(offerBodySchema, data.body);
 
     const cloudinaryResponse = await uploadImage(data.files, data.id);
 
@@ -282,26 +239,10 @@ const updatePartial = async (data) => {
         throwError('No data was sent', 400);
     }
 
-    const fields = [
-        {
-            name: 'id',
-            type: FIELD_TYPE_OBJECTID,
-            required: true,
-            source: FIELD_SOURCE_PARAMS,
-        },
-        ...(hasBody ? partialOfferFields : []),
-        ...(hasFiles
-            ? [
-                  {
-                      name: FIELD_NAME_PICTURE,
-                      type: FIELD_TYPE_FILE,
-                      required: false,
-                      source: FIELD_SOURCE_FILES,
-                  },
-              ]
-            : []),
-    ];
-    assertCorrectData(data, fields, OFFER);
+    assertValidOfferId(data.id);
+    if (hasBody) {
+        data.body = assertValid(offerBodyPartialSchema, data.body);
+    }
 
     const offerToUpdate = await findOneOrThrow(
         Offer,
@@ -355,10 +296,7 @@ const updatePartial = async (data) => {
 // La vérification de propriété et la suppression sont faites en une seule
 // requête atomique, voir le commentaire de update() ci-dessus.
 const remove = async (data) => {
-    const fields = [
-        { name: 'id', type: FIELD_TYPE_OBJECTID, source: FIELD_SOURCE_PARAMS },
-    ];
-    assertCorrectData(data, fields, OFFER);
+    assertValidOfferId(data.id);
 
     const removedOffer = await findOneAndDeleteOrThrow(
         Offer,
@@ -378,43 +316,7 @@ const remove = async (data) => {
 };
 
 const getAll = async (data) => {
-    const fields = [
-        {
-            name: FIELD_NAME_TITLE,
-            type: FIELD_TYPE_STRING,
-            required: false,
-            source: FIELD_SOURCE_QUERY,
-        },
-        {
-            name: FIELD_NAME_PRICEMIN,
-            type: FIELD_TYPE_NUMBER,
-            min: MIN_PRICEMIN,
-            required: false,
-            source: FIELD_SOURCE_QUERY,
-        },
-        {
-            name: FIELD_NAME_PRICEMAX,
-            type: FIELD_TYPE_NUMBER,
-            min: MIN_PRICEMAX,
-            required: false,
-            source: FIELD_SOURCE_QUERY,
-        },
-        {
-            name: FIELD_NAME_PAGE,
-            type: FIELD_TYPE_NUMBER,
-            min: MIN_PAGE,
-            required: false,
-            source: FIELD_SOURCE_QUERY,
-        },
-        {
-            name: FIELD_NAME_SORT,
-            type: FIELD_TYPE_STRING,
-            required: false,
-            source: FIELD_SOURCE_QUERY,
-            options: FIELD_SORT_OPTIONS,
-        },
-    ];
-    assertCorrectData(data, fields, OFFER);
+    data = assertValid(getAllQuerySchema, data);
 
     const filters = {};
 
@@ -460,15 +362,7 @@ const getAll = async (data) => {
 };
 
 const getOne = async (data) => {
-    const fields = [
-        {
-            name: 'id',
-            type: FIELD_TYPE_OBJECTID,
-            required: true,
-            source: FIELD_SOURCE_PARAMS,
-        },
-    ];
-    assertCorrectData(data, fields, OFFER);
+    assertValidOfferId(data.id);
 
     const offer = await findByIdOrThrow(Offer, data.id, OFFER, populate);
 
