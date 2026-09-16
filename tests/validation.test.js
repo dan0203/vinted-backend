@@ -3,6 +3,39 @@
 // Useful for testing quickly, without depending on a DB connection.
 const request = require('supertest');
 const app = require('../app');
+const sanitizeMongo = require('../middlewares/sanitizeMongo');
+
+describe('sanitizeMongo', () => {
+    it('strips keys starting with $ and keys containing a dot, recursively', () => {
+        const req = {
+            body: {
+                email: 'jane@example.com',
+                '$where': 'this.password.length > 0',
+                filter: { '$gt': '' },
+                'a.b': 'value',
+                nested: { safe: 'ok', '$or': [{ a: 1 }] },
+            },
+        };
+        const next = jest.fn();
+
+        sanitizeMongo(req, {}, next);
+
+        expect(req.body).toEqual({
+            email: 'jane@example.com',
+            filter: {},
+            nested: { safe: 'ok' },
+        });
+        expect(next).toHaveBeenCalledTimes(1);
+    });
+
+    it('does nothing when body is absent', () => {
+        const req = {};
+        const next = jest.fn();
+
+        expect(() => sanitizeMongo(req, {}, next)).not.toThrow();
+        expect(next).toHaveBeenCalledTimes(1);
+    });
+});
 
 describe('validation without a database connection', () => {
     it('POST /users/signup rejects a missing email (Joi)', async () => {
