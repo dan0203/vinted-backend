@@ -396,7 +396,9 @@ const getAll = async (data) => {
         populate
     );
 
-    return { count, offers };
+    const totalPages = Math.ceil(count / limit);
+
+    return { count, page, totalPages, offers };
 };
 
 const getOne = async (data) => {

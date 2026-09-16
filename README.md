@@ -117,6 +117,8 @@ curl "http://localhost:3000/offers?title=jacket&priceMin=10&priceMax=50&sort=pri
 ```json
 {
     "count": 1,
+    "page": 1,
+    "totalPages": 1,
     "offers": [
         {
             "_id": "66f1a2b3c4d5e6f7a8b9c0d2",

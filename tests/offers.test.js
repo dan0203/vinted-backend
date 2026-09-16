@@ -277,6 +277,8 @@ describe('GET /offers', () => {
 
         expect(response.status).toBe(200);
         expect(response.body.count).toBe(1);
+        expect(response.body.page).toBe(1);
+        expect(response.body.totalPages).toBe(1);
         expect(response.body.offers).toHaveLength(1);
     });
 
@@ -287,6 +289,7 @@ describe('GET /offers', () => {
 
         expect(response.status).toBe(200);
         expect(response.body.count).toBe(0);
+        expect(response.body.totalPages).toBe(0);
     });
 });
 
