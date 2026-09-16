@@ -186,10 +186,12 @@ The server connects to MongoDB and Cloudinary on startup and refuses to start if
 - The title search endpoint escapes regex special characters before building the search pattern, closing a ReDoS vector (an unescaped user-supplied string used directly as a regex source can trigger catastrophic backtracking).
 - The global error handler returns a generic `Internal server error` message for unexpected errors and logs the real error server-side only — it never leaks stack traces or internals to the client.
 - Cloudinary response fields that could be sensitive (like `api_key`) are deliberately excluded from the stored image schema.
+- `helmet()` sets standard security headers and `x-powered-by` is disabled.
+- `express.json()` is capped at 10kb and uploaded files at 5MB each; `cors()` is restricted to `FRONTEND_URL`.
+- `/users/signup` and `/users/login` are rate limited (20 attempts per 15 minutes per IP).
 
 ## Known limitations / roadmap
 
-- **CORS / payload size**: `cors()` currently accepts any origin, and `express.json()` has no explicit payload size limit. That's fine for a demo/portfolio project, but a production deployment should restrict CORS to specific origins and cap request body size.
 - **Test coverage is partial**: a Jest/Supertest suite covers the `user` and `offers` routes — signup/login, ownership checks, filtering, validation errors, the multi-image `pictures` field, PUT/PATCH/DELETE cleanup — using an isolated in-memory MongoDB instance (`mongodb-memory-server`), no shared test database involved. Cloudinary itself is mocked (`utils/cloudinary.js`), so the real network calls to Cloudinary's API aren't exercised.
 - **Partial indexing**: `price` now has an index (added to speed up sorting and range filtering as the dataset grows). `name` doesn't — the title search uses an unanchored, case-insensitive regex (`new RegExp(escapeRegex(title), 'i')`), which a standard index can't accelerate. A proper fix would be a MongoDB [text index](https://www.mongodb.com/docs/manual/core/indexes/index-types/index-text/) with the `$text` operator, or a dedicated search engine (Atlas Search) — a real implementation change, not just an index to add.
 
