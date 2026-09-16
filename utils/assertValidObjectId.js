@@ -1,6 +1,4 @@
-// Modules npm
 const mongoose = require('mongoose');
-// Utils
 const throwError = require('./throwError');
 const capitalize = require('./capitalize');
 

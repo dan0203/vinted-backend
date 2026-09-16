@@ -3,14 +3,14 @@ const mongoose = require('mongoose');
 
 let mongoServer;
 
-// Démarre une vraie instance MongoDB éphémère, en mémoire, dédiée aux tests
+// Starts a real, ephemeral, in-memory MongoDB instance dedicated to the tests
 const connect = async () => {
     mongoServer = await MongoMemoryServer.create();
     const uri = mongoServer.getUri();
     await mongoose.connect(uri, { dbName: 'vinted-test' });
 };
 
-// Vide toutes les collections entre deux tests, sans redémarrer le serveur
+// Clears all collections between two tests, without restarting the server
 const clearDatabase = async () => {
     const collections = mongoose.connection.collections;
     for (const key in collections) {
@@ -18,7 +18,7 @@ const clearDatabase = async () => {
     }
 };
 
-// Ferme proprement la connexion et arrête le serveur en mémoire à la fin
+// Cleanly closes the connection and stops the in-memory server at the end
 const closeDatabase = async () => {
     await mongoose.connection.dropDatabase();
     await mongoose.connection.close();

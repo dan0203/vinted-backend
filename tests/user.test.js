@@ -3,8 +3,8 @@ const app = require('../app');
 const { connect, clearDatabase, closeDatabase } = require('./setupTestDb');
 const cloudinary = require('../utils/cloudinary');
 
-// Mocke Cloudinary pour PUT/PATCH /users/:id (avatar) et, indirectement, pour
-// la cascade DELETE qui passe par offer.service (publish/remove d'offres).
+// Mocks Cloudinary for PUT/PATCH /users/:id (avatar) and, indirectly, for
+// the DELETE cascade that goes through offer.service (publishing/removing offers).
 jest.mock('../utils/cloudinary', () => ({
     uploadImage: jest.fn().mockResolvedValue({
         public_id: 'vinted/offers/fake',
@@ -48,7 +48,7 @@ describe('POST /users/signup', () => {
         expect(response.body.account.username).toBe('jane');
     });
 
-    // Ce test ne touche jamais la base : Joi rejette la requête avant tout accès Mongo
+    // This test never touches the DB: Joi rejects the request before any Mongo access
     it('rejects a missing email', async () => {
         const response = await request(app).post('/users/signup').send({
             password: 'secret123',
@@ -114,9 +114,9 @@ describe('POST /users/login', () => {
     });
 });
 
-// Comportements communs à PUT/PATCH/DELETE /users/:id : auth requise, et 403
-// (pas 404, contrairement aux offres — voir user.service.js) si l'id dans
-// l'URL n'est pas celui de l'utilisateur authentifié.
+// Behaviors common to PUT/PATCH/DELETE /users/:id: auth required, and 403
+// (not 404, unlike offers — see user.service.js) if the id in the URL
+// isn't the authenticated user's own.
 const testsCommonToSelfOnlyMethods = (method, getUserId, attachFields) => {
     it('requires authentication', async () => {
         const response = await attachFields(

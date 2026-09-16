@@ -1,4 +1,3 @@
-// Service
 const userService = require('../services/user.service');
 
 const signup = async (req, res, next) => {
@@ -33,9 +32,9 @@ const getOne = async (req, res, next) => {
     }
 };
 
-// Réservé à update/updatePartial/remove ci-dessous, qui ont besoin de
-// plusieurs sources à la fois (body, files, params, user) contrairement à
-// signup/login/getOne qui n'en consomment qu'une seule.
+// Reserved for update/updatePartial/remove below, which need several
+// sources at once (body, files, params, user) unlike signup/login/getOne
+// which each consume only one.
 const buildData = (req) => ({
     body: req.body,
     files: req.files,

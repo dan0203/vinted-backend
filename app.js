@@ -1,31 +1,27 @@
-// Modules npm
 const express = require('express');
 const cors = require('cors');
 const cloudinary = require('cloudinary').v2;
-// Modules internes
 const userRoutes = require('./routes/user.route');
 const offerRoutes = require('./routes/offer.route');
 
-// Connexion à mon compte cloudinary
 cloudinary.config({
     cloud_name: process.env.CLOUDINARY_CLOUD_NAME,
     api_key: process.env.CLOUDINARY_API_KEY,
     api_secret: process.env.CLOUDINARY_API_SECRET,
 });
 
-// Création de l'app + middlewares globaux
 const app = express();
 app.use(cors());
 app.use(express.json());
 
-// Routes
-app.use('/users', userRoutes); // Ajoute automatiquement /users devant les routes importées depuis ./routes/user.js pour éviter de le saisir dans chaque route
+app.use('/users', userRoutes);
 app.use('/offers', offerRoutes);
 app.all(/.*/, (req, res) => {
     res.status(404).json({ message: 'The route does not exist' });
 });
 
-// Middleware de gestion globale d'erreur
+// The 4-argument signature (err first) is what tells Express this is an
+// error handler rather than regular middleware.
 app.use((err, req, res, _next) => {
     console.error(err.message);
 

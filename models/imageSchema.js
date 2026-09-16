@@ -2,7 +2,7 @@ const mongoose = require('mongoose');
 const { Schema } = mongoose;
 
 const imageSchema = new Schema(
-    // Les champs sensibles retournés par Cloudinary (api_key) sont volontairement exclus
+    // Sensitive fields returned by Cloudinary (api_key) are intentionally excluded
     {
         asset_id: String,
         public_id: String,

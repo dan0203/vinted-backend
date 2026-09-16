@@ -1,13 +1,8 @@
-// Modules npm
 const Joi = require('joi');
-// Model
-const User = require('../models/User');
-// Encryption
 const bcrypt = require('bcryptjs');
 const uid2 = require('uid2');
-// Service
+const User = require('../models/User');
 const offerService = require('./offer.service');
-// Utils
 const throwError = require('../utils/throwError');
 const assertValidObjectId = require('../utils/assertValidObjectId');
 const { uploadAvatar } = require('../utils/cloudinary');
@@ -23,9 +18,6 @@ const {
 } = require('../utils/mongooseOrThrow');
 const { USER } = require('../utils/constants');
 
-// Dans ce service, la validation des données se fait grâce au package Joi, comparé à offer service où on les effectue manuellement
-
-// Schémas des formats attendus
 const signupSchema = Joi.object({
     email: Joi.string().email().required(),
     password: Joi.string().min(6).required(),
@@ -38,9 +30,9 @@ const loginSchema = Joi.object({
     password: Joi.string().min(6).required(),
 });
 
-// username/newsletter uniquement : email et password ne se modifient pas via
-// ces routes. avatar (fichier) est validé à part, comme picture/pictures
-// côté offer — Joi ne s'applique pas bien aux objets fichier d'express-fileupload.
+// username/newsletter only: email and password aren't modified through
+// these routes. avatar (file) is validated separately, like picture/pictures
+// on the offer side — Joi doesn't apply well to express-fileupload file objects.
 const userBodySchema = Joi.object({
     username: Joi.string().trim().min(2).max(30).required(),
     newsletter: Joi.boolean(),
@@ -53,8 +45,8 @@ const userBodyPartialSchema = Joi.object({
 
 const updateOptions = { returnDocument: 'after', runValidators: true };
 
-// Valide `value` contre `schema` et renvoie la version validée (avec les
-// conversions de type Joi, ex. trim), ou lève une 400.
+// Validates `value` against `schema` and returns the validated version (with
+// Joi's type conversions, e.g. trim), or throws a 400.
 function assertValid(schema, value) {
     const { error, value: validated } = schema.validate(value);
     if (error) {
@@ -74,10 +66,10 @@ function toUserDTO(user) {
     };
 }
 
-// L'id dans l'URL doit être celui de l'utilisateur authentifié : contrairement
-// aux offres, GET /users/:id est public (le profil n'est pas secret), donc
-// cacher l'existence d'un compte via 404 n'apporterait rien ici — 403 est le
-// code le plus juste pour "authentifié mais pas le bon compte".
+// The id in the URL must be the authenticated user's own: unlike offers,
+// GET /users/:id is public (the profile isn't secret), so hiding an
+// account's existence via 404 wouldn't achieve anything here — 403 is the
+// most accurate code for "authenticated but not the right account".
 function assertIsSelf(id, user) {
     assertValidObjectId(id, USER);
     if (id !== String(user._id)) {
@@ -86,21 +78,16 @@ function assertIsSelf(id, user) {
 }
 
 const signup = async (data) => {
-    // Si les données fournies ne correspondent pas au format attendu
     const { error } = signupSchema.validate(data);
     if (error) {
         throwError(error.details[0].message, 400);
     }
 
-    // Si un compte existe déjà avec cette adresse email
     const existingUser = await User.findOne({ email: data.email });
     if (existingUser) {
         throwError('An account already exists with this email address', 409);
     }
 
-    // Si les informations fournies sont validées,
-    //  on crée les éléments manquants (hash, token)
-    //  et on enregistre le newUser dans la bdd
     const hash = await bcrypt.hash(data.password, 10);
     const token = uid2(16);
 
@@ -126,29 +113,21 @@ const signup = async (data) => {
 };
 
 const login = async (data) => {
-    // Si les données fournies ne correspondent pas au format attendu
     const { error } = loginSchema.validate(data);
     if (error) {
         throwError(error.details[0].message, 400);
     }
 
-    // Récupérer en bdd le user correspondant à l'email
     const user = await User.findOne({ email: data.email });
-
-    // S'il n'existe pas, erreur
     if (!user) {
         throwError('Unauthorized', 403);
     }
 
-    // S'il existe, tester la crypto
     const isPasswordValid = await bcrypt.compare(data.password, user.hash);
-
-    // Si c'est KO, erreur
     if (!isPasswordValid) {
         throwError('Unauthorized', 403);
     }
 
-    // Si c'est OK, on retourne l'élément (_id, token, account.username)
     return {
         _id: user._id,
         token: user.token,
@@ -166,12 +145,12 @@ const getOne = async (data) => {
     return toUserDTO(user);
 };
 
-// Remplacement complet (PUT) : username requis, comme le reste du body.
-// avatar reste un cas à part — c'est un champ optionnel unique (pas un
-// tableau comme "pictures" côté offer), donc contrairement au full-replace
-// des offres qui vide "pictures" si absent, ici on ne remplace l'avatar que
-// s'il est explicitement envoyé : modifier son username ne doit jamais
-// effacer silencieusement son avatar.
+// Full replacement (PUT): username required, like the rest of the body.
+// avatar remains a special case — it's a single optional field (not an
+// array like "pictures" on the offer side), so unlike the full-replace of
+// offers which clears "pictures" when absent, here the avatar is only
+// replaced if it's explicitly sent: changing the username must never
+// silently wipe the avatar.
 const update = async (data) => {
     assertIsSelf(data.params.id, data.user);
     data.body = assertValid(userBodySchema, data.body);
@@ -195,9 +174,9 @@ const updatePartial = async (data) => {
     return applyUserUpdate(data);
 };
 
-// Partagé entre update() et updatePartial() : construit les champs à
-// modifier, upload le nouvel avatar s'il y en a un (avec rollback si
-// l'update échoue), puis supprime l'ancien avatar une fois l'update réussi.
+// Shared between update() and updatePartial(): builds the fields to
+// change, uploads the new avatar if there is one (with rollback if the
+// update fails), then deletes the old avatar once the update succeeds.
 async function applyUserUpdate(data) {
     const updateFields = {};
 
@@ -235,8 +214,8 @@ async function applyUserUpdate(data) {
     return toUserDTO(updatedUser);
 }
 
-// La cascade de suppression des offres (issue #1) n'est pas optionnelle :
-// pas d'offre orpheline avec un owner qui n'existe plus.
+// The offer-deletion cascade (issue #1) isn't optional: no orphaned offer
+// should be left with an owner that no longer exists.
 const remove = async (data) => {
     assertIsSelf(data.params.id, data.user);
 

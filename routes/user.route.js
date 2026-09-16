@@ -1,11 +1,9 @@
-// Modules npm
 const express = require('express');
-const router = express.Router();
-const fileUpload = require('express-fileupload'); // rendre les formdata lisibles à nos routes
-// Modules internes
+const fileUpload = require('express-fileupload'); // makes multipart/form-data files available on req.files
 const userController = require('../controllers/user.controller');
 const isAuthenticated = require('../middlewares/isAuthenticated');
 
+const router = express.Router();
 const upload = fileUpload();
 
 router.post('/signup', userController.signup);

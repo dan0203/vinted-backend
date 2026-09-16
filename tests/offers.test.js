@@ -3,15 +3,15 @@ const app = require('../app');
 const { connect, clearDatabase, closeDatabase } = require('./setupTestDb');
 const cloudinary = require('../utils/cloudinary');
 
-// Le picture est obligatoire au publish/update : on mocke Cloudinary pour ne
-// pas dépendre du réseau ni de vrais credentials pendant les tests.
+// The picture is required on publish/update: Cloudinary is mocked so tests
+// don't depend on the network or real credentials.
 jest.mock('../utils/cloudinary', () => ({
     uploadImage: jest.fn().mockResolvedValue({
         public_id: 'vinted/offers/fake',
         secure_url: 'https://res.cloudinary.com/fake/image/upload/fake.jpg',
     }),
-    // Reflète le nombre de fichiers "pictures" envoyés, pour que les tests
-    // multi-images puissent vérifier response.body.pictures.length.
+    // Reflects the number of "pictures" files sent, so multi-image tests
+    // can check response.body.pictures.length.
     uploadImages: jest.fn().mockImplementation((files) => {
         if (!files || !files.pictures) return Promise.resolve([]);
         const pictureFiles = Array.isArray(files.pictures)
@@ -28,14 +28,14 @@ jest.mock('../utils/cloudinary', () => ({
     deleteFolder: jest.fn().mockResolvedValue(undefined),
 }));
 
-// Un petit buffer suffit : express-fileupload n'a besoin que d'un fichier
-// présent sous le champ "picture", son contenu n'est jamais lu par le mock.
+// A small buffer is enough: express-fileupload only needs a file present
+// under the "picture" field, its content is never read by the mock.
 const attachPicture = (req) =>
     req.attach('picture', Buffer.from('fake-image'), 'picture.jpg');
 
-// Attache `count` fichiers sous le champ "pictures" : express-fileupload les
-// regroupe automatiquement en tableau quand plusieurs fichiers partagent le
-// même nom de champ.
+// Attaches `count` files under the "pictures" field: express-fileupload
+// automatically groups them into an array when several files share the
+// same field name.
 const attachPictures = (req, count) => {
     for (let i = 0; i < count; i++) {
         req.attach(
@@ -71,7 +71,7 @@ afterAll(async () => {
 });
 
 describe('POST /offers/publish', () => {
-    // Pas de DB touchée : isAuthenticated renvoie 401 avant même d'aller vérifier le token en base
+    // No DB touched: isAuthenticated returns 401 before even checking the token in the DB
     it('requires authentication', async () => {
         const response = await request(app)
             .post('/offers/publish')
@@ -191,7 +191,7 @@ describe('GET /offers', () => {
 });
 
 describe('GET /offers/:id', () => {
-    // Pas de DB touchée : le format d'id invalide est rejeté avant tout appel à Offer.findById
+    // No DB touched: the malformed id is rejected before any call to Offer.findById
     it('rejects a malformed id', async () => {
         const response = await request(app).get('/offers/not-a-valid-id');
 
@@ -207,12 +207,12 @@ describe('GET /offers/:id', () => {
     });
 });
 
-// Comportements communs à PUT et PATCH /offers/:id : auth requise, refus si
-// on n'est pas propriétaire, 404 si l'offre n'existe pas. `attachFields` reçoit
-// une requête supertest déjà construite (méthode + url) et y ajoute des champs
-// valides pour que seule l'authentification/l'ownership/l'existence soit testée.
+// Behaviors common to PUT and PATCH /offers/:id: auth required, rejected if
+// not the owner, 404 if the offer doesn't exist. `attachFields` receives an
+// already-built supertest request (method + url) and adds valid fields to
+// it so that only authentication/ownership/existence is being tested.
 const testsCommonToUpdateMethods = (method, getOfferId, attachFields) => {
-    // Pas de DB touchée : isAuthenticated renvoie 401 avant même d'aller vérifier le token en base
+    // No DB touched: isAuthenticated returns 401 before even checking the token in the DB
     it('requires authentication', async () => {
         const response = await attachFields(
             request(app)[method](`/offers/${getOfferId()}`)
@@ -221,10 +221,10 @@ const testsCommonToUpdateMethods = (method, getOfferId, attachFields) => {
         expect(response.status).toBe(401);
     });
 
-    // L'ownership check et l'écriture sont faites en une seule requête atomique
-    // ({_id, owner}) : une offre existante mais qui n'appartient pas à
-    // l'utilisateur est donc indistinguable d'une offre inexistante (404),
-    // pour ne pas révéler son existence à un tiers.
+    // The ownership check and the write are done in a single atomic request
+    // ({_id, owner}): an existing offer that doesn't belong to the user is
+    // thus indistinguishable from a nonexistent offer (404), so as not to
+    // reveal its existence to a third party.
     it('returns 404 for an update by a user who is not the owner', async () => {
         const otherSignup = await request(app).post('/users/signup').send({
             email: 'other@example.com',
@@ -272,7 +272,7 @@ describe('PUT /offers/:id', () => {
         offerId = publishResponse.body._id;
     });
 
-    // PUT exige tous les champs (remplacement complet), y compris l'image
+    // PUT requires every field (full replacement), including the image
     testsCommonToUpdateMethods(
         'put',
         () => offerId,
@@ -382,7 +382,7 @@ describe('PATCH /offers/:id', () => {
 
         const { details } = response.body;
         expect(details.brand).toBe('Nike');
-        // Les autres détails, non envoyés dans ce PATCH, doivent être préservés
+        // The other details, not sent in this PATCH, must be preserved
         expect(details.size).toBe('M');
         expect(details.color).toBe('Blue');
         expect(details.condition).toBe('Good');
@@ -447,9 +447,9 @@ describe('DELETE /offers/:id', () => {
         offerId = publishResponse.body._id;
     });
 
-    // Voir le commentaire équivalent dans testsCommonToUpdateMethods : 404 et
-    // non 403, l'ownership check et la suppression étant une seule requête
-    // atomique ({_id, owner}).
+    // See the equivalent comment in testsCommonToUpdateMethods: 404, not
+    // 403, since the ownership check and the deletion are a single
+    // atomic request ({_id, owner}).
     it('returns 404 for a deletion by a user who is not the owner', async () => {
         const otherSignup = await request(app).post('/users/signup').send({
             email: 'other@example.com',
@@ -500,7 +500,7 @@ describe('DELETE /offers/:id', () => {
             .set('Authorization', `Bearer ${token}`);
 
         expect(response.status).toBe(200);
-        // 1 image principale + 2 pictures
+        // 1 main image + 2 pictures
         expect(cloudinary.removeImage.mock.calls.length).toBe(
             removeImageCallsBefore + 3
         );

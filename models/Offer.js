@@ -3,6 +3,9 @@ const { Schema } = mongoose;
 const imageSchema = require('./imageSchema');
 
 const offerSchema = new Schema({
+    // Declared explicitly (instead of being left to Mongoose) so offer.service.js
+    // can generate the id upfront and use it as the Cloudinary storage path
+    // before the document is saved.
     _id: Schema.Types.ObjectId,
     name: { type: String, required: true, trim: true },
     description: { type: String, required: true, trim: true },
@@ -29,6 +32,7 @@ const offerSchema = new Schema({
     },
 });
 
+// Speeds up GET /offers, which always sorts by price (see FIELD_SORT_OPTIONS)
 offerSchema.index({ price: 1 });
 
 const Offer = mongoose.model('Offer', offerSchema);

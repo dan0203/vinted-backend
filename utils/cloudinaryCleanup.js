@@ -1,7 +1,7 @@
 const { removeImage, deleteFolder } = require('./cloudinary');
 
-// Log non bloquant : on ne fait jamais échouer une opération réussie en DB
-// à cause d'un nettoyage Cloudinary qui échoue derrière.
+// Non-blocking log: a successful DB operation should never be failed
+// because a Cloudinary cleanup fails afterward.
 async function safeRemoveImage(publicId, logLabel) {
     if (!publicId) return;
 
@@ -20,9 +20,9 @@ async function safeDeleteFolder(folderPath, logLabel) {
     }
 }
 
-// Si `operation` échoue, on supprime les images qu'on venait d'uploader
-// (`uploadedImages`, réponses Cloudinary avec un `public_id`) pour ne pas
-// en laisser d'orphelines.
+// If `operation` fails, delete the images that were just uploaded
+// (`uploadedImages`, Cloudinary responses with a `public_id`) so none are
+// left orphaned.
 async function withImageRollback(uploadedImages, operation) {
     try {
         return await operation();

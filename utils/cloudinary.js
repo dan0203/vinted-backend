@@ -1,6 +1,4 @@
-// Modules npm
 const cloudinary = require('cloudinary').v2;
-// Utils
 const convertToBase64 = require('./convertToBase64');
 const throwError = require('./throwError');
 
@@ -19,15 +17,11 @@ async function uploadImage(files, id) {
         );
     }
 
-    // Transforme mon image de Buffer à String
     const base64Image = convertToBase64(files.picture);
 
     try {
-        // On fait une requête à cloudinary pour qu'il héberge l'image
         cloudinaryResponse = await cloudinary.uploader.upload(base64Image, {
-            // dans un sous-dossier correspondant à l'id de l'offre
             asset_folder: folderPath,
-            // width: 'abc', // générer une erreur pour tester
         });
     } catch (error) {
         throwError(`Upload Cloudinary failed: ${error.message}`, 500);
@@ -36,9 +30,9 @@ async function uploadImage(files, id) {
     return cloudinaryResponse;
 }
 
-// Upload les images secondaires (champ "pictures", 0 à plusieurs fichiers).
-// Si l'un des uploads du lot échoue, ceux déjà réussis dans ce même lot sont
-// détruits avant de relancer l'erreur, pour ne rien laisser d'orphelin.
+// Upload the secondary images ("pictures" field, 0 to several files).
+// If one of the uploads in the batch fails, the ones already succeeded in
+// that same batch are destroyed before re-throwing the error, so nothing is left orphaned.
 async function uploadImages(files, id) {
     if (!files || !files.pictures) {
         return [];
@@ -74,8 +68,8 @@ async function uploadImages(files, id) {
     return uploaded;
 }
 
-// Upload l'avatar (champ "avatar", optionnel contrairement à "picture" pour
-// les offres) : renvoie undefined si aucun fichier n'a été envoyé.
+// Upload the avatar ("avatar" field, optional unlike "picture" for offers):
+// returns undefined if no file was sent.
 async function uploadAvatar(files, id) {
     if (!files || !files.avatar) {
         return undefined;
@@ -104,9 +98,9 @@ async function removeImage(publicId) {
     }
 }
 
-// Cloudinary exige un dossier vide avant de le supprimer : tous les assets
-// qu'il contient doivent déjà avoir été détruits via removeImage() avant
-// d'appeler celle-ci.
+// Cloudinary requires a folder to be empty before deleting it: all assets it
+// contains must already have been destroyed via removeImage() before
+// calling this one.
 async function deleteFolder(folderPath) {
     try {
         await cloudinary.api.delete_folder(folderPath);

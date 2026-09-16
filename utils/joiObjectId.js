@@ -1,8 +1,8 @@
 const Joi = require('joi');
 const mongoose = require('mongoose');
 
-// Validateur Joi réutilisable pour un ObjectId Mongo : Joi n'a pas de type
-// natif pour ça, on délègue à mongoose.Types.ObjectId.isValid.
+// Reusable Joi validator for a Mongo ObjectId: Joi has no native type for
+// this, so it delegates to mongoose.Types.ObjectId.isValid.
 function joiObjectId() {
     return Joi.string().custom((value, helpers) => {
         if (!mongoose.Types.ObjectId.isValid(value)) {

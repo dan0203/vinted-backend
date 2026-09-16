@@ -1,9 +1,8 @@
-// Service
 const offerService = require('../services/offer.service');
 
-// Chaque source de données (body, files, query, params, user) garde sa
-// propre clé plutôt que d'être aplatie sur `data` : plus prévisible pour le
-// service, et pas d'ambiguïté si une route combine un jour plusieurs sources.
+// Each data source (body, files, query, params, user) keeps its own key
+// instead of being flattened onto `data`: more predictable for the service,
+// and no ambiguity if a route ever combines several sources.
 const buildData = (req) => ({
     body: req.body,
     files: req.files,
@@ -13,8 +12,6 @@ const buildData = (req) => ({
 });
 
 const publish = async (req, res, next) => {
-    // Les clefs textuelles du formData sont dans req.body
-    // Les clefs fichiers du formData sont dans req.files
     try {
         const newOffer = await offerService.publish(buildData(req));
 

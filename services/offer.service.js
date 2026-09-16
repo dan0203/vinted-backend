@@ -1,9 +1,6 @@
-// Modules npm
 const mongoose = require('mongoose');
 const Joi = require('joi');
-// Model
 const Offer = require('../models/Offer');
-// Utils
 const throwError = require('../utils/throwError');
 const escapeRegex = require('../utils/escapeRegex');
 const { uploadImage, uploadImages } = require('../utils/cloudinary');
@@ -33,9 +30,9 @@ const {
     save,
 } = require('../utils/mongooseOrThrow');
 
-// Schémas Joi : les fichiers (`picture`) ne sont volontairement pas dedans,
-// Joi ne s'applique pas bien aux objets fichier d'express-fileupload. Leur
-// présence est déjà vérifiée par uploadImage() dans utils/cloudinary.js.
+// Joi schemas: the files (`picture`) are intentionally not included, Joi
+// doesn't apply well to express-fileupload file objects. Their presence is
+// already checked by uploadImage() in utils/cloudinary.js.
 const offerBodySchema = Joi.object({
     title: Joi.string().trim().min(1).required(),
     description: Joi.string().trim().min(1).required(),
@@ -66,8 +63,8 @@ const getAllQuerySchema = Joi.object({
     sort: Joi.string().valid(...FIELD_SORT_OPTIONS),
 });
 
-// Valide `value` contre `schema` et renvoie la version validée (avec les
-// conversions de type Joi, ex. "25" -> 25), ou lève une 400.
+// Validates `value` against `schema` and returns the validated version (with
+// Joi's type conversions, e.g. "25" -> 25), or throws a 400.
 function assertValid(schema, value) {
     const { error, value: validated } = schema.validate(value);
     if (error) {
@@ -88,8 +85,8 @@ const populate = {
     select: '_id account',
 };
 const replaceOptions = {
-    // On a besoin du document AVANT écriture pour connaître l'ancienne image
-    // à supprimer sur Cloudinary, tout en gardant une écriture atomique.
+    // We need the document BEFORE the write to know the old image to
+    // delete on Cloudinary, while still keeping the write atomic.
     returnDocument: 'before',
     runValidators: true,
 };
@@ -100,15 +97,16 @@ const partialUpdateOptions = {
 
 const detailFieldNames = ['brand', 'size', 'color', 'condition', 'city'];
 
-// Construit l'objet `details` à partir des champs du body
+// Used for full replacement (PUT), where offerBodySchema already guarantees
+// every field is present — unlike mergeDetails() below, no filtering needed.
 function buildDetails(body) {
     return Object.fromEntries(
         detailFieldNames.map((fieldName) => [fieldName, body[fieldName]])
     );
 }
 
-// Fusionne les détails existants avec les champs présents (et non vides) du body.
-// Renvoie `undefined` si aucun champ pertinent n'a été fourni.
+// Merges the existing details with the present (and non-empty) fields from the body.
+// Returns `undefined` if no relevant field was provided.
 function mergeDetails(existingDetails, body) {
     const changedFields = Object.fromEntries(
         detailFieldNames
@@ -125,7 +123,7 @@ function mergeDetails(existingDetails, body) {
     return { ...existingDetails, ...changedFields };
 }
 
-// Forme unique et complète renvoyée par toutes les méthodes du service
+// Single, complete shape returned by all the service's methods
 function toOfferDTO(offer) {
     return {
         _id: offer._id,
@@ -140,8 +138,8 @@ function toOfferDTO(offer) {
     };
 }
 
-// Supprime image + pictures + le dossier de l'offre sur Cloudinary (best
-// effort, non bloquant), réutilisé par remove() et removeAllByOwner().
+// Deletes image + pictures + the offer's folder on Cloudinary (best
+// effort, non-blocking), reused by remove() and removeAllByOwner().
 async function cleanupOfferImages(offer) {
     await safeRemoveImage(offer.image.public_id, 'Failed removing image');
     await Promise.all(
@@ -168,7 +166,7 @@ const publish = async (data) => {
     data.body = assertValid(offerBodySchema, data.body);
     assertPictureCountWithinLimit(data.files);
 
-    // On génère un id MongoDB pour le chemin de stockage de l'image dans cloudinary
+    // Generate a MongoDB id for the image's storage path in Cloudinary
     const newOfferId = new mongoose.Types.ObjectId();
 
     const image = await uploadImage(data.files, newOfferId);
@@ -194,20 +192,19 @@ const publish = async (data) => {
     return toOfferDTO(publishedOffer);
 };
 
-// Remplacement complet d'une offre (PUT) : tous les champs sont requis.
-// La vérification de propriété et l'écriture sont faites en une seule requête
-// atomique (filtre { _id, owner }) pour éviter tout TOCTOU entre les deux ;
-// en contrepartie, une offre existante appartenant à un autre utilisateur
-// renvoie 404 (comme une offre inexistante) plutôt que 403, afin de ne pas
-// révéler son existence.
+// Full replacement of an offer (PUT): all fields are required.
+// The ownership check and the write are done in a single atomic request
+// (filter { _id, owner }) to avoid any TOCTOU between the two; as a
+// tradeoff, an existing offer belonging to another user returns 404 (like a
+// nonexistent offer) rather than 403, so as not to reveal its existence.
 const update = async (data) => {
     assertValidOfferId(data.params.id);
     data.body = assertValid(offerBodySchema, data.body);
     assertPictureCountWithinLimit(data.files);
 
     const image = await uploadImage(data.files, data.params.id);
-    // Remplacement complet (PUT) : pas de "pictures" envoyé => on repart d'un
-    // lot d'images secondaires vide, comme pour les autres champs.
+    // Full replacement (PUT): no "pictures" sent => start over with an
+    // empty batch of secondary images, like for the other fields.
     const pictures = await withImageRollback([image], () =>
         uploadImages(data.files, data.params.id)
     );
@@ -234,7 +231,8 @@ const update = async (data) => {
             )
     );
 
-    // Si tout s'est bien passé, on supprime les anciennes images
+    // Only reachable once the write has succeeded, so the old images are
+    // never deleted if the update itself failed.
     await safeRemoveImage(
         offerBeforeUpdate.image.public_id,
         'Failed removing old image'
@@ -248,10 +246,10 @@ const update = async (data) => {
     return toOfferDTO({ ...offerBeforeUpdate.toObject(), ...updateFields });
 };
 
-// Mise à jour partielle (PATCH) : nécessite de connaître les details
-// existant pour y fusionner les champs modifiés, d'où une lecture préalable
-// (scopée par owner) avant l'écriture. Contrairement à update(), on ne peut
-// pas rendre cette opération atomique en une seule requête.
+// Partial update (PATCH): needs to know the existing details to merge the
+// changed fields into, hence a preliminary read (scoped by owner) before
+// the write. Unlike update(), this operation can't be made atomic in a
+// single request.
 const updatePartial = async (data) => {
     const hasBody = !!data.body;
     const hasFiles = !!data.files;
@@ -286,8 +284,8 @@ const updatePartial = async (data) => {
         }
     }
 
-    // Chaque fichier est indépendant : envoyer "pictures" sans "picture" (ou
-    // l'inverse) ne touche que le champ concerné, comme les champs body.
+    // Each file is independent: sending "pictures" without "picture" (or
+    // vice versa) only touches the relevant field, like the body fields.
     const hasNewImage = hasFiles && !!data.files.picture;
     const hasNewPictures = hasFiles && !!data.files.pictures;
     const uploadedImages = [];
@@ -317,7 +315,8 @@ const updatePartial = async (data) => {
         )
     );
 
-    // Si tout s'est bien passé, on supprime les anciennes images remplacées
+    // Only reachable once the write has succeeded, so the replaced images
+    // are never deleted if the update itself failed.
     if (hasNewImage) {
         await safeRemoveImage(
             offerToUpdate.image.public_id,
@@ -338,8 +337,8 @@ const updatePartial = async (data) => {
     return toOfferDTO(updatedOffer);
 };
 
-// La vérification de propriété et la suppression sont faites en une seule
-// requête atomique, voir le commentaire de update() ci-dessus.
+// The ownership check and the deletion are done in a single atomic
+// request, see the comment on update() above.
 const remove = async (data) => {
     assertValidOfferId(data.params.id);
 
@@ -350,8 +349,6 @@ const remove = async (data) => {
         populate
     );
 
-    // Si tout s'est bien passé, on supprime les images puis le dossier de
-    // l'offre dans Cloudinary
     await cleanupOfferImages(removedOffer);
 
     return toOfferDTO(removedOffer);
@@ -362,12 +359,12 @@ const getAll = async (data) => {
 
     const filters = {};
 
-    // Filtre title
+    // title filter
     if (query.title) {
         filters.name = new RegExp(escapeRegex(query.title), 'i');
     }
 
-    // Filtres priceMin et priceMax
+    // priceMin and priceMax filters
     const { priceMin: min, priceMax: max } = query;
 
     if (min !== undefined && max !== undefined && min > max) {
@@ -380,17 +377,16 @@ const getAll = async (data) => {
         if (max !== undefined) filters.price.$lte = max;
     }
 
-    // Filtre page
+    // page filter
     const page = query.page === undefined ? 1 : query.page;
     const limit = OFFERS_PER_PAGE;
     const skip = limit * (page - 1);
 
-    // Filtre sort
+    // sort filter
     const sort = query.sort === undefined ? FIELD_SORT_OPTIONS[0] : query.sort;
     const direction = sort.replace('price-', '');
     const sortBy = { price: direction };
 
-    // Récupération des offres correspondant aux filtres et à la page demandés
     const [offers, count] = await findAll(
         Offer,
         filters,
@@ -411,11 +407,10 @@ const getOne = async (data) => {
     return toOfferDTO(offer);
 };
 
-// Cascade utilisée par la suppression de compte user (issue #1) : supprime
-// toutes les offres d'un owner, avec le même nettoyage Cloudinary que
-// remove(). Les erreurs de la requête Mongo remontent (elles doivent faire
-// échouer l'appelant) ; seul le nettoyage Cloudinary reste non bloquant, via
-// cleanupOfferImages().
+// Cascade used by user account deletion (issue #1): deletes all of an
+// owner's offers, with the same Cloudinary cleanup as remove(). Mongo
+// request errors propagate (they must fail the caller); only the
+// Cloudinary cleanup stays non-blocking, via cleanupOfferImages().
 const removeAllByOwner = async (ownerId) => {
     const offers = await Offer.find({ owner: ownerId });
     if (offers.length === 0) return;

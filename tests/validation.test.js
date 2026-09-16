@@ -1,6 +1,6 @@
-// Tests qui ne touchent jamais MongoDB : la validation (Joi ou manuelle) ou le
-// middleware d'authentification rejettent la requête avant tout accès à la base.
-// Utile pour tester rapidement, sans dépendre d'une connexion DB.
+// Tests that never touch MongoDB: validation (Joi or manual) or the
+// authentication middleware rejects the request before any DB access.
+// Useful for testing quickly, without depending on a DB connection.
 const request = require('supertest');
 const app = require('../app');
 
