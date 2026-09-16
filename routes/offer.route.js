@@ -4,7 +4,12 @@ const offerController = require('../controllers/offer.controller');
 const isAuthenticated = require('../middlewares/isAuthenticated');
 
 const router = express.Router();
-const upload = fileUpload();
+const upload = fileUpload({
+    limits: { fileSize: 5 * 1024 * 1024 },
+    abortOnLimit: true,
+    safeFileNames: true,
+    preserveExtension: true,
+});
 
 router.post('/publish', isAuthenticated, upload, offerController.publish);
 router.get('/', offerController.getAll);

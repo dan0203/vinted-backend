@@ -5,7 +5,12 @@ const isAuthenticated = require('../middlewares/isAuthenticated');
 const authLimiter = require('../middlewares/authLimiter');
 
 const router = express.Router();
-const upload = fileUpload();
+const upload = fileUpload({
+    limits: { fileSize: 5 * 1024 * 1024 },
+    abortOnLimit: true,
+    safeFileNames: true,
+    preserveExtension: true,
+});
 
 router.post('/signup', authLimiter, userController.signup);
 router.post('/login', authLimiter, userController.login);
