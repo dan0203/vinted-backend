@@ -2,6 +2,7 @@ const request = require('supertest');
 const app = require('../app');
 const { connect, clearDatabase, closeDatabase } = require('./setupTestDb');
 const cloudinary = require('../utils/cloudinary');
+const mongooseOrThrow = require('../utils/mongooseOrThrow');
 
 // The picture is required on publish/update: Cloudinary is mocked so tests
 // don't depend on the network or real credentials.
@@ -27,6 +28,18 @@ jest.mock('../utils/cloudinary', () => ({
     removeImage: jest.fn().mockResolvedValue(undefined),
     deleteFolder: jest.fn().mockResolvedValue(undefined),
 }));
+
+// Wraps the real implementations so rollback tests can force a single write
+// to fail (mockRejectedValueOnce) while every other call behaves normally.
+jest.mock('../utils/mongooseOrThrow', () => {
+    const actual = jest.requireActual('../utils/mongooseOrThrow');
+    return {
+        ...actual,
+        save: jest.fn(actual.save),
+        findOneAndUpdateOrThrow: jest.fn(actual.findOneAndUpdateOrThrow),
+        findByIdAndUpdateOrThrow: jest.fn(actual.findByIdAndUpdateOrThrow),
+    };
+});
 
 // A small buffer is enough: express-fileupload only needs a file present
 // under the "picture" field, its content is never read by the mock.
@@ -152,6 +165,87 @@ describe('POST /offers/publish', () => {
         );
 
         expect(response.status).toBe(400);
+    });
+
+    it('attempts no cleanup when the main image upload itself fails', async () => {
+        cloudinary.uploadImage.mockRejectedValueOnce(new Error('upload failed'));
+        const removeImageCallsBefore = cloudinary.removeImage.mock.calls.length;
+
+        const response = await attachPicture(
+            request(app)
+                .post('/offers/publish')
+                .set('Authorization', `Bearer ${token}`)
+                .field('title', 'Vintage jacket')
+                .field('description', 'Good condition, worn a few times')
+                .field('price', '25')
+                .field('brand', "Levi's")
+                .field('size', 'M')
+                .field('color', 'Blue')
+                .field('condition', 'Good')
+                .field('city', 'Paris')
+        );
+
+        expect(response.status).toBeGreaterThanOrEqual(400);
+        // Nothing was uploaded yet, so there is nothing to roll back
+        expect(cloudinary.removeImage.mock.calls.length).toBe(
+            removeImageCallsBefore
+        );
+    });
+
+    it('rolls back the main image when uploading secondary pictures fails', async () => {
+        cloudinary.uploadImages.mockRejectedValueOnce(new Error('upload failed'));
+        const removeImageCallsBefore = cloudinary.removeImage.mock.calls.length;
+
+        const response = await attachPictures(
+            attachPicture(
+                request(app)
+                    .post('/offers/publish')
+                    .set('Authorization', `Bearer ${token}`)
+                    .field('title', 'Vintage jacket')
+                    .field('description', 'Good condition, worn a few times')
+                    .field('price', '25')
+                    .field('brand', "Levi's")
+                    .field('size', 'M')
+                    .field('color', 'Blue')
+                    .field('condition', 'Good')
+                    .field('city', 'Paris')
+            ),
+            2
+        );
+
+        expect(response.status).toBeGreaterThanOrEqual(400);
+        expect(cloudinary.removeImage).toHaveBeenCalledWith('vinted/offers/fake');
+        expect(cloudinary.removeImage.mock.calls.length).toBe(
+            removeImageCallsBefore + 1
+        );
+    });
+
+    it('rolls back all uploaded images when saving the offer fails', async () => {
+        mongooseOrThrow.save.mockRejectedValueOnce(new Error('db failed'));
+        const removeImageCallsBefore = cloudinary.removeImage.mock.calls.length;
+
+        const response = await attachPictures(
+            attachPicture(
+                request(app)
+                    .post('/offers/publish')
+                    .set('Authorization', `Bearer ${token}`)
+                    .field('title', 'Vintage jacket')
+                    .field('description', 'Good condition, worn a few times')
+                    .field('price', '25')
+                    .field('brand', "Levi's")
+                    .field('size', 'M')
+                    .field('color', 'Blue')
+                    .field('condition', 'Good')
+                    .field('city', 'Paris')
+            ),
+            2
+        );
+
+        expect(response.status).toBeGreaterThanOrEqual(400);
+        // 1 main image + 2 secondary pictures
+        expect(cloudinary.removeImage.mock.calls.length).toBe(
+            removeImageCallsBefore + 3
+        );
     });
 });
 
@@ -333,6 +427,89 @@ describe('PUT /offers/:id', () => {
         expect(details.condition).toBe('New');
         expect(details.city).toBe('Lyon');
     });
+
+    it('attempts no cleanup when the new main image upload itself fails', async () => {
+        cloudinary.uploadImage.mockRejectedValueOnce(new Error('upload failed'));
+        const removeImageCallsBefore = cloudinary.removeImage.mock.calls.length;
+
+        const response = await attachPicture(
+            request(app)
+                .put(`/offers/${offerId}`)
+                .set('Authorization', `Bearer ${token}`)
+                .field('title', 'Updated jacket')
+                .field('description', 'Updated description')
+                .field('price', '40')
+                .field('brand', 'Nike')
+                .field('size', 'L')
+                .field('color', 'Black')
+                .field('condition', 'New')
+                .field('city', 'Lyon')
+        );
+
+        expect(response.status).toBeGreaterThanOrEqual(400);
+        // Nothing was uploaded yet, so there is nothing to roll back
+        expect(cloudinary.removeImage.mock.calls.length).toBe(
+            removeImageCallsBefore
+        );
+    });
+
+    it('rolls back the new main image when uploading secondary pictures fails', async () => {
+        cloudinary.uploadImages.mockRejectedValueOnce(new Error('upload failed'));
+        const removeImageCallsBefore = cloudinary.removeImage.mock.calls.length;
+
+        const response = await attachPictures(
+            attachPicture(
+                request(app)
+                    .put(`/offers/${offerId}`)
+                    .set('Authorization', `Bearer ${token}`)
+                    .field('title', 'Updated jacket')
+                    .field('description', 'Updated description')
+                    .field('price', '40')
+                    .field('brand', 'Nike')
+                    .field('size', 'L')
+                    .field('color', 'Black')
+                    .field('condition', 'New')
+                    .field('city', 'Lyon')
+            ),
+            2
+        );
+
+        expect(response.status).toBeGreaterThanOrEqual(400);
+        expect(cloudinary.removeImage).toHaveBeenCalledWith('vinted/offers/fake');
+        expect(cloudinary.removeImage.mock.calls.length).toBe(
+            removeImageCallsBefore + 1
+        );
+    });
+
+    it('rolls back all newly uploaded images when the update write fails', async () => {
+        mongooseOrThrow.findOneAndUpdateOrThrow.mockRejectedValueOnce(
+            new Error('db failed')
+        );
+        const removeImageCallsBefore = cloudinary.removeImage.mock.calls.length;
+
+        const response = await attachPictures(
+            attachPicture(
+                request(app)
+                    .put(`/offers/${offerId}`)
+                    .set('Authorization', `Bearer ${token}`)
+                    .field('title', 'Updated jacket')
+                    .field('description', 'Updated description')
+                    .field('price', '40')
+                    .field('brand', 'Nike')
+                    .field('size', 'L')
+                    .field('color', 'Black')
+                    .field('condition', 'New')
+                    .field('city', 'Lyon')
+            ),
+            2
+        );
+
+        expect(response.status).toBeGreaterThanOrEqual(400);
+        // 1 new main image + 2 new secondary pictures
+        expect(cloudinary.removeImage.mock.calls.length).toBe(
+            removeImageCallsBefore + 3
+        );
+    });
 });
 
 describe('PATCH /offers/:id', () => {
@@ -424,6 +601,65 @@ describe('PATCH /offers/:id', () => {
 
         expect(response.status).toBe(200);
         expect(response.body.pictures).toHaveLength(2);
+    });
+
+    it('attempts no cleanup when the new main image upload itself fails', async () => {
+        cloudinary.uploadImage.mockRejectedValueOnce(new Error('upload failed'));
+        const removeImageCallsBefore = cloudinary.removeImage.mock.calls.length;
+
+        const response = await attachPicture(
+            request(app)
+                .patch(`/offers/${offerId}`)
+                .set('Authorization', `Bearer ${token}`)
+        );
+
+        expect(response.status).toBeGreaterThanOrEqual(400);
+        // Nothing was uploaded yet, so there is nothing to roll back
+        expect(cloudinary.removeImage.mock.calls.length).toBe(
+            removeImageCallsBefore
+        );
+    });
+
+    it('rolls back the new main image when uploading secondary pictures fails', async () => {
+        cloudinary.uploadImages.mockRejectedValueOnce(new Error('upload failed'));
+        const removeImageCallsBefore = cloudinary.removeImage.mock.calls.length;
+
+        const response = await attachPictures(
+            attachPicture(
+                request(app)
+                    .patch(`/offers/${offerId}`)
+                    .set('Authorization', `Bearer ${token}`)
+            ),
+            2
+        );
+
+        expect(response.status).toBeGreaterThanOrEqual(400);
+        expect(cloudinary.removeImage).toHaveBeenCalledWith('vinted/offers/fake');
+        expect(cloudinary.removeImage.mock.calls.length).toBe(
+            removeImageCallsBefore + 1
+        );
+    });
+
+    it('rolls back all newly uploaded images when the update write fails', async () => {
+        mongooseOrThrow.findByIdAndUpdateOrThrow.mockRejectedValueOnce(
+            new Error('db failed')
+        );
+        const removeImageCallsBefore = cloudinary.removeImage.mock.calls.length;
+
+        const response = await attachPictures(
+            attachPicture(
+                request(app)
+                    .patch(`/offers/${offerId}`)
+                    .set('Authorization', `Bearer ${token}`)
+            ),
+            2
+        );
+
+        expect(response.status).toBeGreaterThanOrEqual(400);
+        // 1 new main image + 2 new secondary pictures
+        expect(cloudinary.removeImage.mock.calls.length).toBe(
+            removeImageCallsBefore + 3
+        );
     });
 });
 
