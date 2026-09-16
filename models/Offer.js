@@ -4,30 +4,32 @@ const imageSchema = require('./imageSchema');
 
 const offerSchema = new Schema({
     _id: Schema.Types.ObjectId,
-    product_name: { type: String, required: true, trim: true },
-    product_description: { type: String, required: true, trim: true },
-    product_price: { type: Number, required: true, min: 0 },
-    product_details: {
-        // Chaque entrée est un objet libre du type { MARQUE: 'ZARA' }.
-        type: [Schema.Types.Mixed],
-        default: [],
+    name: { type: String, required: true, trim: true },
+    description: { type: String, required: true, trim: true },
+    price: { type: Number, required: true, min: 0 },
+    details: {
+        brand: String,
+        size: String,
+        color: String,
+        condition: String,
+        city: String,
     },
-    product_pictures: {
+    pictures: {
         type: [imageSchema],
         default: [],
     },
     owner: { type: Schema.Types.ObjectId, ref: 'User', required: true },
-    product_image: {
+    image: {
         type: imageSchema,
         default: {},
     },
-    product_date: {
+    createdAt: {
         type: Date,
         default: Date.now,
     },
 });
 
-offerSchema.index({ product_price: 1 });
+offerSchema.index({ price: 1 });
 
 const Offer = mongoose.model('Offer', offerSchema);
 

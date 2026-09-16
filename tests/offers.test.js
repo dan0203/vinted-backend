@@ -66,8 +66,8 @@ describe('POST /offers/publish', () => {
         );
 
         expect(response.status).toBe(201);
-        expect(response.body.product_name).toBe('Vintage jacket');
-        expect(response.body.product_price).toBe(25);
+        expect(response.body.name).toBe('Vintage jacket');
+        expect(response.body.price).toBe(25);
         expect(response.body.owner.account.username).toBe('seller');
     });
 
@@ -250,15 +250,15 @@ describe('PUT /offers/:id', () => {
         );
 
         expect(response.status).toBe(200);
-        expect(response.body.product_name).toBe('Updated jacket');
-        expect(response.body.product_price).toBe(40);
+        expect(response.body.name).toBe('Updated jacket');
+        expect(response.body.price).toBe(40);
 
-        const details = Object.assign({}, ...response.body.product_details);
-        expect(details.MARQUE).toBe('Nike');
-        expect(details.TAILLE).toBe('L');
-        expect(details.COULEUR).toBe('Black');
-        expect(details.ÉTAT).toBe('New');
-        expect(details.EMPLACEMENT).toBe('Lyon');
+        const { details } = response.body;
+        expect(details.brand).toBe('Nike');
+        expect(details.size).toBe('L');
+        expect(details.color).toBe('Black');
+        expect(details.condition).toBe('New');
+        expect(details.city).toBe('Lyon');
     });
 });
 
@@ -295,11 +295,11 @@ describe('PATCH /offers/:id', () => {
             .field('price', '30');
 
         expect(response.status).toBe(200);
-        expect(response.body.product_price).toBe(30);
-        expect(response.body.product_name).toBe('Vintage jacket');
+        expect(response.body.price).toBe(30);
+        expect(response.body.name).toBe('Vintage jacket');
     });
 
-    it('merges a single product_details field instead of replacing the whole array', async () => {
+    it('merges a single details field instead of replacing the whole object', async () => {
         const response = await request(app)
             .patch(`/offers/${offerId}`)
             .set('Authorization', `Bearer ${token}`)
@@ -307,13 +307,13 @@ describe('PATCH /offers/:id', () => {
 
         expect(response.status).toBe(200);
 
-        const details = Object.assign({}, ...response.body.product_details);
-        expect(details.MARQUE).toBe('Nike');
+        const { details } = response.body;
+        expect(details.brand).toBe('Nike');
         // Les autres détails, non envoyés dans ce PATCH, doivent être préservés
-        expect(details.TAILLE).toBe('M');
-        expect(details.COULEUR).toBe('Blue');
-        expect(details.ÉTAT).toBe('Good');
-        expect(details.EMPLACEMENT).toBe('Paris');
+        expect(details.size).toBe('M');
+        expect(details.color).toBe('Blue');
+        expect(details.condition).toBe('Good');
+        expect(details.city).toBe('Paris');
     });
 });
 
