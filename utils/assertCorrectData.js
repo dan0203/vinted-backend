@@ -2,6 +2,12 @@
 const assertValidObjectId = require('../utils/assertValidObjectId');
 const throwError = require('./throwError');
 const capitalize = require('./capitalize');
+const {
+    FIELD_TYPE_STRING,
+    FIELD_TYPE_NUMBER,
+    FIELD_TYPE_OBJECTID,
+    FIELD_SOURCE_BODY,
+} = require('../utils/constants');
 
 /*
 
@@ -62,7 +68,7 @@ function assertCorrectData(data, fields = [], schema = '') {
             query: data, // TODO: modifier en data.query dans le controller
             params: data, // TODO: modifier en data.params dans le controller
         };
-        const dataObj = sourceMap[f.source || 'body'];
+        const dataObj = sourceMap[f.source || FIELD_SOURCE_BODY];
 
         // Verify if field is required but absent
         if (
@@ -76,9 +82,9 @@ function assertCorrectData(data, fields = [], schema = '') {
 
         // Verify options if field is required or not required but present
         if (f.required || dataObj[f.name] !== undefined) {
-            if (f.type === 'objectId') {
+            if (f.type === FIELD_TYPE_OBJECTID) {
                 assertValidObjectId(dataObj[f.name], schema);
-            } else if (f.type === 'string') {
+            } else if (f.type === FIELD_TYPE_STRING) {
                 if (
                     f.minLength !== undefined &&
                     dataObj[f.name].length < f.minLength
@@ -109,7 +115,7 @@ function assertCorrectData(data, fields = [], schema = '') {
                         );
                     }
                 }
-            } else if (f.type === 'number') {
+            } else if (f.type === FIELD_TYPE_NUMBER) {
                 if (
                     String(dataObj[f.name]).trim() === '' ||
                     !Number.isFinite(Number(dataObj[f.name]))

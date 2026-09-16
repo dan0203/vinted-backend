@@ -8,11 +8,41 @@ const escapeRegex = require('../utils/escapeRegex');
 const findByIdOrThrow = require('../utils/findByIdOrThrow');
 const { uploadImage, removeImage } = require('../utils/cloudinary');
 const assertCorrectData = require('../utils/assertCorrectData');
+const {
+    MIN_PRICE,
+    MIN_PRICEMIN,
+    MIN_PRICEMAX,
+    MIN_PAGE,
+    OFFERS_PER_PAGE,
+    FIELD_TYPE_STRING,
+    FIELD_TYPE_NUMBER,
+    FIELD_TYPE_FILE,
+    FIELD_TYPE_OBJECTID,
+    FIELD_SOURCE_BODY,
+    FIELD_SOURCE_FILES,
+    FIELD_SOURCE_PARAMS,
+    FIELD_SOURCE_QUERY,
+    FIELD_SORT_OPTIONS,
+    OFFER,
+    FIELD_NAME_TITLE,
+    FIELD_NAME_DESCRIPTION,
+    FIELD_NAME_PRICE,
+    FIELD_NAME_CONDITION,
+    FIELD_NAME_CITY,
+    FIELD_NAME_BRAND,
+    FIELD_NAME_SIZE,
+    FIELD_NAME_COLOR,
+    FIELD_NAME_PICTURE,
+    FIELD_NAME_PRICEMIN,
+    FIELD_NAME_PRICEMAX,
+    FIELD_NAME_PAGE,
+    FIELD_NAME_SORT,
+} = require('../utils/constants');
 
 // Dans ce service, la validation des données se fait manuellement, comparé à user service qui utilise le package Joi
 
 async function findOwnedOfferOrThrow(data) {
-    const offer = await findByIdOrThrow(Offer, data.id, 'Offer');
+    const offer = await findByIdOrThrow(Offer, data.id, OFFER);
 
     // L'offre n'appartient pas au user connecté
     if (!data.user._id.equals(offer.owner._id)) {
@@ -24,60 +54,60 @@ async function findOwnedOfferOrThrow(data) {
 
 const baseOfferFields = [
     {
-        name: 'title',
-        type: 'string',
+        name: FIELD_NAME_TITLE,
+        type: FIELD_TYPE_STRING,
         required: true,
-        source: 'body',
+        source: FIELD_SOURCE_BODY,
     },
     {
-        name: 'description',
-        type: 'string',
+        name: FIELD_NAME_DESCRIPTION,
+        type: FIELD_TYPE_STRING,
         required: true,
-        source: 'body',
+        source: FIELD_SOURCE_BODY,
     },
     {
-        name: 'price',
-        type: 'number',
-        min: 0,
+        name: FIELD_NAME_PRICE,
+        type: FIELD_TYPE_NUMBER,
+        min: MIN_PRICE,
         exclusiveMin: true,
         required: true,
-        source: 'body',
+        source: FIELD_SOURCE_BODY,
     },
     {
-        name: 'condition',
-        type: 'string',
+        name: FIELD_NAME_CONDITION,
+        type: FIELD_TYPE_STRING,
         required: true,
-        source: 'body',
+        source: FIELD_SOURCE_BODY,
     },
     {
-        name: 'city',
-        type: 'string',
+        name: FIELD_NAME_CITY,
+        type: FIELD_TYPE_STRING,
         required: true,
-        source: 'body',
+        source: FIELD_SOURCE_BODY,
     },
     {
-        name: 'brand',
-        type: 'string',
+        name: FIELD_NAME_BRAND,
+        type: FIELD_TYPE_STRING,
         required: true,
-        source: 'body',
+        source: FIELD_SOURCE_BODY,
     },
     {
-        name: 'size',
-        type: 'string',
+        name: FIELD_NAME_SIZE,
+        type: FIELD_TYPE_STRING,
         required: true,
-        source: 'body',
+        source: FIELD_SOURCE_BODY,
     },
     {
-        name: 'color',
-        type: 'string',
+        name: FIELD_NAME_COLOR,
+        type: FIELD_TYPE_STRING,
         required: true,
-        source: 'body',
+        source: FIELD_SOURCE_BODY,
     },
     {
-        name: 'picture',
-        type: 'file',
+        name: FIELD_NAME_PICTURE,
+        type: FIELD_TYPE_FILE,
         required: true,
-        source: 'files',
+        source: FIELD_SOURCE_FILES,
     },
 ];
 
@@ -138,12 +168,12 @@ const update = async (data) => {
         ...baseOfferFields,
         {
             name: 'id',
-            type: 'objectId',
+            type: FIELD_TYPE_OBJECTID,
             required: true,
-            source: 'params',
+            source: FIELD_SOURCE_PARAMS,
         },
     ];
-    assertCorrectData(data, fields, 'offer');
+    assertCorrectData(data, fields, OFFER);
 
     const offerToUpdate = await findOwnedOfferOrThrow(data);
 
@@ -231,77 +261,77 @@ const updatePartial = async (data) => {
     const fields = [
         {
             name: 'id',
-            type: 'objectId',
+            type: FIELD_TYPE_OBJECTID,
             required: true,
-            source: 'params',
+            source: FIELD_SOURCE_PARAMS,
         },
     ];
 
     if (hasBody) {
         fields.push(
             {
-                name: 'title',
-                type: 'string',
+                name: FIELD_NAME_TITLE,
+                type: FIELD_TYPE_STRING,
                 required: false,
-                source: 'body',
+                source: FIELD_SOURCE_BODY,
             },
             {
-                name: 'description',
-                type: 'string',
+                name: FIELD_NAME_DESCRIPTION,
+                type: FIELD_TYPE_STRING,
                 required: false,
-                source: 'body',
+                source: FIELD_SOURCE_BODY,
             },
             {
-                name: 'price',
-                type: 'number',
-                min: 0,
+                name: FIELD_NAME_PRICE,
+                type: FIELD_TYPE_NUMBER,
+                min: MIN_PRICE,
                 exclusiveMin: true,
                 required: false,
-                source: 'body',
+                source: FIELD_SOURCE_BODY,
             },
             {
-                name: 'condition',
-                type: 'string',
+                name: FIELD_NAME_CONDITION,
+                type: FIELD_TYPE_STRING,
                 required: false,
-                source: 'body',
+                source: FIELD_SOURCE_BODY,
             },
             {
-                name: 'city',
-                type: 'string',
+                name: FIELD_NAME_CITY,
+                type: FIELD_TYPE_STRING,
                 required: false,
-                source: 'body',
+                source: FIELD_SOURCE_BODY,
             },
             {
-                name: 'brand',
-                type: 'string',
+                name: FIELD_NAME_BRAND,
+                type: FIELD_TYPE_STRING,
                 required: false,
-                source: 'body',
+                source: FIELD_SOURCE_BODY,
             },
             {
-                name: 'size',
-                type: 'string',
+                name: FIELD_NAME_SIZE,
+                type: FIELD_TYPE_STRING,
                 required: false,
-                source: 'body',
+                source: FIELD_SOURCE_BODY,
             },
             {
-                name: 'color',
-                type: 'string',
+                name: FIELD_NAME_COLOR,
+                type: FIELD_TYPE_STRING,
                 required: false,
-                source: 'body',
+                source: FIELD_SOURCE_BODY,
             }
         );
     }
 
     if (hasFiles) {
         fields.push({
-            name: 'picture',
-            type: 'file',
+            name: FIELD_NAME_PICTURE,
+            type: FIELD_TYPE_FILE,
             required: false,
-            source: 'files',
+            source: FIELD_SOURCE_FILES,
         });
     }
 
-    assertCorrectData(data, fields, 'offer');
+    assertCorrectData(data, fields, OFFER);
 
     const offerToUpdate = await findOwnedOfferOrThrow(data);
 
@@ -395,8 +425,10 @@ const updatePartial = async (data) => {
 };
 
 const remove = async (data) => {
-    const fields = [{ name: 'id', type: 'objectId', source: 'params' }];
-    assertCorrectData(data, fields, 'offer');
+    const fields = [
+        { name: 'id', type: FIELD_TYPE_OBJECTID, source: FIELD_SOURCE_PARAMS },
+    ];
+    assertCorrectData(data, fields, OFFER);
 
     await findOwnedOfferOrThrow(data);
 
@@ -444,41 +476,41 @@ const remove = async (data) => {
 const getAll = async (data) => {
     const fields = [
         {
-            name: 'title',
-            type: 'string',
+            name: FIELD_NAME_TITLE,
+            type: FIELD_TYPE_STRING,
             required: false,
-            source: 'query',
+            source: FIELD_SOURCE_QUERY,
         },
         {
-            name: 'priceMin',
-            type: 'number',
-            min: 0,
+            name: FIELD_NAME_PRICEMIN,
+            type: FIELD_TYPE_NUMBER,
+            min: MIN_PRICEMIN,
             required: false,
-            source: 'query',
+            source: FIELD_SOURCE_QUERY,
         },
         {
-            name: 'priceMax',
-            type: 'number',
-            min: 0,
+            name: FIELD_NAME_PRICEMAX,
+            type: FIELD_TYPE_NUMBER,
+            min: MIN_PRICEMAX,
             required: false,
-            source: 'query',
+            source: FIELD_SOURCE_QUERY,
         },
         {
-            name: 'page',
-            type: 'number',
-            min: 0,
+            name: FIELD_NAME_PAGE,
+            type: FIELD_TYPE_NUMBER,
+            min: MIN_PAGE,
             required: false,
-            source: 'query',
+            source: FIELD_SOURCE_QUERY,
         },
         {
-            name: 'sort',
-            type: 'string',
+            name: FIELD_NAME_SORT,
+            type: FIELD_TYPE_STRING,
             required: false,
-            source: 'query',
-            options: ['price-asc', 'price-desc'],
+            source: FIELD_SOURCE_QUERY,
+            options: FIELD_SORT_OPTIONS,
         },
     ];
-    assertCorrectData(data, fields, 'offer');
+    assertCorrectData(data, fields, OFFER);
 
     const filters = {};
 
@@ -504,11 +536,11 @@ const getAll = async (data) => {
     // Filtre page
     const page = data.page === undefined ? 1 : Number(data.page);
 
-    const nbOffersPerPage = 20;
+    const nbOffersPerPage = OFFERS_PER_PAGE;
     const nbOffersToSkip = nbOffersPerPage * (page - 1);
 
     // Filtre sort
-    let sort = data.sort === undefined ? 'price-asc' : data.sort;
+    let sort = data.sort === undefined ? FIELD_SORT_OPTIONS[0] : data.sort;
 
     sort = sort.replace('price-', '');
 
@@ -527,11 +559,16 @@ const getAll = async (data) => {
 
 const getOne = async (data) => {
     const fields = [
-        { name: 'id', type: 'objectId', required: true, source: 'params' },
+        {
+            name: 'id',
+            type: FIELD_TYPE_OBJECTID,
+            required: true,
+            source: FIELD_SOURCE_PARAMS,
+        },
     ];
-    assertCorrectData(data, fields, 'offer');
+    assertCorrectData(data, fields, OFFER);
 
-    const offer = await findByIdOrThrow(Offer, data.id, 'Offer');
+    const offer = await findByIdOrThrow(Offer, data.id, OFFER);
     await offer.populate('owner', '_id account');
 
     return {

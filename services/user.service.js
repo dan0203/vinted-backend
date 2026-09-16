@@ -9,6 +9,7 @@ const uid2 = require('uid2');
 const throwError = require('../utils/throwError');
 const assertValidObjectId = require('../utils/assertValidObjectId');
 const findByIdOrThrow = require('../utils/findByIdOrThrow');
+const { USER } = require('../utils/constants');
 
 // Dans ce service, la validation des données se fait grâce au package Joi, comparé à offer service où on les effectue manuellement
 
@@ -99,9 +100,9 @@ const login = async (data) => {
 };
 
 const getOne = async (data) => {
-    assertValidObjectId(data.id, 'User');
+    assertValidObjectId(data.id, USER);
 
-    const user = await findByIdOrThrow(User, data.id, 'User');
+    const user = await findByIdOrThrow(User, data.id, USER);
 
     return {
         _id: user._id,
