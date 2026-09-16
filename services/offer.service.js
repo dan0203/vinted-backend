@@ -411,4 +411,25 @@ const getOne = async (data) => {
     return toOfferDTO(offer);
 };
 
-module.exports = { getAll, publish, update, updatePartial, remove, getOne };
+// Cascade utilisée par la suppression de compte user (issue #1) : supprime
+// toutes les offres d'un owner, avec le même nettoyage Cloudinary que
+// remove(). Les erreurs de la requête Mongo remontent (elles doivent faire
+// échouer l'appelant) ; seul le nettoyage Cloudinary reste non bloquant, via
+// cleanupOfferImages().
+const removeAllByOwner = async (ownerId) => {
+    const offers = await Offer.find({ owner: ownerId });
+    if (offers.length === 0) return;
+
+    await Offer.deleteMany({ owner: ownerId });
+    await Promise.all(offers.map(cleanupOfferImages));
+};
+
+module.exports = {
+    getAll,
+    publish,
+    update,
+    updatePartial,
+    remove,
+    getOne,
+    removeAllByOwner,
+};

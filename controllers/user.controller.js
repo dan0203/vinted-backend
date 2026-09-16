@@ -33,4 +33,51 @@ const getOne = async (req, res, next) => {
     }
 };
 
-module.exports = { signup, login, getOne };
+// Réservé à update/updatePartial/remove ci-dessous, qui ont besoin de
+// plusieurs sources à la fois (body, files, params, user) contrairement à
+// signup/login/getOne qui n'en consomment qu'une seule.
+const buildData = (req) => ({
+    body: req.body,
+    files: req.files,
+    params: req.params,
+    user: req.user,
+});
+
+const update = async (req, res, next) => {
+    try {
+        const updatedUser = await userService.update(buildData(req));
+
+        return res.status(200).json(updatedUser);
+    } catch (error) {
+        next(error);
+    }
+};
+
+const updatePartial = async (req, res, next) => {
+    try {
+        const updatedUser = await userService.updatePartial(buildData(req));
+
+        return res.status(200).json(updatedUser);
+    } catch (error) {
+        next(error);
+    }
+};
+
+const remove = async (req, res, next) => {
+    try {
+        const removedUser = await userService.remove(buildData(req));
+
+        return res.status(200).json(removedUser);
+    } catch (error) {
+        next(error);
+    }
+};
+
+module.exports = {
+    signup,
+    login,
+    getOne,
+    update,
+    updatePartial,
+    remove,
+};
