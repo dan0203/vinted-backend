@@ -7,6 +7,7 @@ const MAX_PICTURES = 5;
 const FIELD_SORT_OPTIONS = ['price-asc', 'price-desc'];
 const OFFER = 'offer';
 const USER = 'user';
+const MAX_TOKEN_AGE_MS = 30 * 24 * 60 * 60 * 1000;
 
 module.exports = {
     MIN_PRICE,
@@ -18,4 +19,5 @@ module.exports = {
     FIELD_SORT_OPTIONS,
     OFFER,
     USER,
+    MAX_TOKEN_AGE_MS,
 };

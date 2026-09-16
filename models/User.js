@@ -11,6 +11,7 @@ const userSchema = new Schema({
     newsletter: Boolean,
     hash: { type: String, required: true },
     token: { type: String, required: true },
+    tokenIssuedAt: { type: Date, required: true, default: Date.now },
 });
 
 const User = mongoose.model('User', userSchema);
