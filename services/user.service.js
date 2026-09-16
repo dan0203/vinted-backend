@@ -128,6 +128,10 @@ const login = async (data) => {
         throwError('Unauthorized', 403);
     }
 
+    user.token = uid2(16);
+    user.tokenIssuedAt = new Date();
+    await user.save();
+
     return {
         _id: user._id,
         token: user.token,

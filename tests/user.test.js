@@ -2,6 +2,8 @@ const request = require('supertest');
 const app = require('../app');
 const { connect, clearDatabase, closeDatabase } = require('./setupTestDb');
 const cloudinary = require('../utils/cloudinary');
+const User = require('../models/User');
+const { MAX_TOKEN_AGE_MS } = require('../utils/constants');
 
 // Mocks Cloudinary for PUT/PATCH /users/:id (avatar) and, indirectly, for
 // the DELETE cascade that goes through offer.service (publishing/removing offers).
@@ -219,6 +221,29 @@ describe('PUT /users/:id', () => {
 
         expect(response.status).toBe(200);
         expect(response.body.account.avatar).toBeTruthy();
+    });
+});
+
+describe('token expiration', () => {
+    it('rejects a token older than the max age', async () => {
+        const signupResponse = await request(app).post('/users/signup').send({
+            email: 'expired@example.com',
+            password: 'secret123',
+            username: 'expired',
+        });
+        const userId = signupResponse.body._id;
+        const token = signupResponse.body.token;
+
+        await User.findByIdAndUpdate(userId, {
+            tokenIssuedAt: new Date(Date.now() - MAX_TOKEN_AGE_MS - 1000),
+        });
+
+        const response = await request(app)
+            .put(`/users/${userId}`)
+            .set('Authorization', `Bearer ${token}`)
+            .field('username', 'stillexpired');
+
+        expect(response.status).toBe(401);
     });
 });
 
