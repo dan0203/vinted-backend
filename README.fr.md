@@ -56,17 +56,17 @@ URL de base : `http://localhost:3000` (ou le `PORT` configuré). Tous les corps 
 
 Les routes authentifiées attendent un header `Authorization: Bearer <token>`, avec le token renvoyé par l'inscription/connexion.
 
-| Méthode | Route             | Auth                         | Description                                                                                                                                                                                          |
-| ------- | ----------------- | ---------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| POST    | `/users/signup`   | —                            | Créer un compte. Corps : `email`, `password` (6 caractères min.), `username`, `newsletter` (optionnel).                                                                                             |
-| POST    | `/users/login`    | —                            | Se connecter. Corps : `email`, `password`.                                                                                                                                                           |
-| GET     | `/users/:id`      | —                            | Récupérer le profil public d'un utilisateur (`_id`, `account.username`, `account.avatar`, `newsletter`).                                                                                            |
+| Méthode | Route             | Auth                         | Description                                                                                                                                                                                                 |
+| ------- | ----------------- | ---------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| POST    | `/users/signup`   | —                            | Créer un compte. Corps : `email`, `password` (6 caractères min.), `username`, `newsletter` (optionnel).                                                                                                     |
+| POST    | `/users/login`    | —                            | Se connecter. Corps : `email`, `password`.                                                                                                                                                                  |
+| GET     | `/users/:id`      | —                            | Récupérer le profil public d'un utilisateur (`_id`, `account.username`, `account.avatar`, `newsletter`).                                                                                                    |
 | POST    | `/offers/publish` | ✅                           | Publier une annonce. `multipart/form-data` : `title`, `description`, `price`, `brand`, `size`, `color`, `condition`, `city`, un fichier `picture` obligatoire, et jusqu'à 5 fichiers `pictures` optionnels. |
-| GET     | `/offers`         | —                            | Lister les annonces. Paramètres de requête : `title`, `priceMin`, `priceMax`, `sort` (`price-asc` \| `price-desc`, croissant par défaut), `page` (défaut 1, 20 par page).                           |
-| GET     | `/offers/:id`     | —                            | Récupérer une annonce.                                                                                                                                                                               |
-| PUT     | `/offers/:id`     | ✅ (propriétaire uniquement) | Remplacer une annonce. Même corps que `publish` — l'ensemble des champs est requis, `picture` inclus ; omettre `pictures` vide les images secondaires.                                              |
-| PATCH   | `/offers/:id`     | ✅ (propriétaire uniquement) | Modifier partiellement une annonce — n'envoyer que les champs à changer. `pictures`, si envoyé, remplace tout le lot d'images secondaires ; `picture` et `pictures` sont indépendants l'un de l'autre. |
-| DELETE  | `/offers/:id`     | ✅ (propriétaire uniquement) | Supprimer une annonce et toutes ses images Cloudinary.                                                                                                                                               |
+| GET     | `/offers`         | —                            | Lister les annonces. Paramètres de requête : `title`, `priceMin`, `priceMax`, `sort` (`price-asc` \| `price-desc`, croissant par défaut), `page` (défaut 1, 20 par page).                                   |
+| GET     | `/offers/:id`     | —                            | Récupérer une annonce.                                                                                                                                                                                      |
+| PUT     | `/offers/:id`     | ✅ (propriétaire uniquement) | Remplacer une annonce. Même corps que `publish` — l'ensemble des champs est requis, `picture` inclus ; omettre `pictures` vide les images secondaires.                                                      |
+| PATCH   | `/offers/:id`     | ✅ (propriétaire uniquement) | Modifier partiellement une annonce — n'envoyer que les champs à changer. `pictures`, si envoyé, remplace tout le lot d'images secondaires ; `picture` et `pictures` sont indépendants l'un de l'autre.      |
+| DELETE  | `/offers/:id`     | ✅ (propriétaire uniquement) | Supprimer une annonce et toutes ses images Cloudinary.                                                                                                                                                      |
 
 ### Exemples
 
@@ -127,8 +127,12 @@ curl "http://localhost:3000/offers?title=veste&priceMin=10&priceMax=50&sort=pric
             },
             "image": { "secure_url": "https://res.cloudinary.com/..." },
             "pictures": [
-                { "secure_url": "https://res.cloudinary.com/.../veste-dos.jpg" },
-                { "secure_url": "https://res.cloudinary.com/.../veste-etiquette.jpg" }
+                {
+                    "secure_url": "https://res.cloudinary.com/.../veste-dos.jpg"
+                },
+                {
+                    "secure_url": "https://res.cloudinary.com/.../veste-etiquette.jpg"
+                }
             ],
             "owner": { "_id": "...", "account": { "username": "jane" } }
         }

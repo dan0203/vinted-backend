@@ -64,7 +64,9 @@ async function uploadImages(files, id) {
     const failed = results.find((result) => result.status === 'rejected');
     if (failed) {
         await Promise.allSettled(
-            uploaded.map((image) => cloudinary.uploader.destroy(image.public_id))
+            uploaded.map((image) =>
+                cloudinary.uploader.destroy(image.public_id)
+            )
         );
         throwError(`Upload Cloudinary failed: ${failed.reason.message}`, 500);
     }

@@ -38,7 +38,11 @@ const attachPicture = (req) =>
 // même nom de champ.
 const attachPictures = (req, count) => {
     for (let i = 0; i < count; i++) {
-        req.attach('pictures', Buffer.from(`fake-image-${i}`), `picture-${i}.jpg`);
+        req.attach(
+            'pictures',
+            Buffer.from(`fake-image-${i}`),
+            `picture-${i}.jpg`
+        );
     }
     return req;
 };

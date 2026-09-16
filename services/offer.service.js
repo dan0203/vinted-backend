@@ -349,7 +349,10 @@ const updatePartial = async (data) => {
     if (hasNewPictures) {
         await Promise.all(
             offerToUpdate.pictures.map((picture) =>
-                safeRemoveImage(picture.public_id, 'Failed removing old picture')
+                safeRemoveImage(
+                    picture.public_id,
+                    'Failed removing old picture'
+                )
             )
         );
     }
@@ -371,7 +374,10 @@ const remove = async (data) => {
 
     // Si tout s'est bien passé, on supprime les images du dossier, puis le
     // dossier lui-même (Cloudinary exige qu'il soit vide) dans Cloudinary
-    await safeRemoveImage(removedOffer.image.public_id, 'Failed removing image');
+    await safeRemoveImage(
+        removedOffer.image.public_id,
+        'Failed removing image'
+    );
     await Promise.all(
         removedOffer.pictures.map((picture) =>
             safeRemoveImage(picture.public_id, 'Failed removing picture')

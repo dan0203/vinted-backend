@@ -56,17 +56,17 @@ Base URL: `http://localhost:3000` (or your configured `PORT`). All request/respo
 
 Authenticated routes expect an `Authorization: Bearer <token>` header, using the token returned by signup/login.
 
-| Method | Route             | Auth            | Description                                                                                                                                                                             |
-| ------ | ----------------- | --------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| POST   | `/users/signup`   | —               | Create an account. Body: `email`, `password` (min 6 chars), `username`, `newsletter` (optional).                                                                                        |
-| POST   | `/users/login`    | —               | Log in. Body: `email`, `password`.                                                                                                                                                      |
-| GET    | `/users/:id`      | —               | Get a user's public profile (`_id`, `account.username`, `account.avatar`, `newsletter`).                                                                                                |
+| Method | Route             | Auth            | Description                                                                                                                                                                                   |
+| ------ | ----------------- | --------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| POST   | `/users/signup`   | —               | Create an account. Body: `email`, `password` (min 6 chars), `username`, `newsletter` (optional).                                                                                              |
+| POST   | `/users/login`    | —               | Log in. Body: `email`, `password`.                                                                                                                                                            |
+| GET    | `/users/:id`      | —               | Get a user's public profile (`_id`, `account.username`, `account.avatar`, `newsletter`).                                                                                                      |
 | POST   | `/offers/publish` | ✅              | Publish a new offer. `multipart/form-data`: `title`, `description`, `price`, `brand`, `size`, `color`, `condition`, `city`, a required `picture` file, and up to 5 optional `pictures` files. |
-| GET    | `/offers`         | —               | List offers. Query params: `title`, `priceMin`, `priceMax`, `sort` (`price-asc` \| `price-desc`, default ascending), `page` (default 1, 20 per page).                                   |
-| GET    | `/offers/:id`     | —               | Get a single offer.                                                                                                                                                                     |
-| PUT    | `/offers/:id`     | ✅ (owner only) | Replace an offer. Same body as `publish` — the full set of fields is required, `picture` included; omitting `pictures` clears the secondary images.                                    |
-| PATCH  | `/offers/:id`     | ✅ (owner only) | Partially update an offer — send only the fields that change. `pictures`, if sent, replaces the whole secondary-image set; `picture` and `pictures` are independent of one another.     |
-| DELETE | `/offers/:id`     | ✅ (owner only) | Delete an offer and all its Cloudinary images.                                                                                                                                          |
+| GET    | `/offers`         | —               | List offers. Query params: `title`, `priceMin`, `priceMax`, `sort` (`price-asc` \| `price-desc`, default ascending), `page` (default 1, 20 per page).                                         |
+| GET    | `/offers/:id`     | —               | Get a single offer.                                                                                                                                                                           |
+| PUT    | `/offers/:id`     | ✅ (owner only) | Replace an offer. Same body as `publish` — the full set of fields is required, `picture` included; omitting `pictures` clears the secondary images.                                           |
+| PATCH  | `/offers/:id`     | ✅ (owner only) | Partially update an offer — send only the fields that change. `pictures`, if sent, replaces the whole secondary-image set; `picture` and `pictures` are independent of one another.           |
+| DELETE | `/offers/:id`     | ✅ (owner only) | Delete an offer and all its Cloudinary images.                                                                                                                                                |
 
 ### Examples
 
@@ -127,8 +127,12 @@ curl "http://localhost:3000/offers?title=jacket&priceMin=10&priceMax=50&sort=pri
             },
             "image": { "secure_url": "https://res.cloudinary.com/..." },
             "pictures": [
-                { "secure_url": "https://res.cloudinary.com/.../jacket-back.jpg" },
-                { "secure_url": "https://res.cloudinary.com/.../jacket-label.jpg" }
+                {
+                    "secure_url": "https://res.cloudinary.com/.../jacket-back.jpg"
+                },
+                {
+                    "secure_url": "https://res.cloudinary.com/.../jacket-label.jpg"
+                }
             ],
             "owner": { "_id": "...", "account": { "username": "jane" } }
         }
