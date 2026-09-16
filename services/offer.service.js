@@ -5,15 +5,13 @@ const Offer = require('../models/Offer');
 // Utils
 const throwError = require('../utils/throwError');
 const escapeRegex = require('../utils/escapeRegex');
-const assertValidObjectId = require('../utils/assertValidObjectId');
 const findByIdOrThrow = require('../utils/findByIdOrThrow');
 const { uploadImage, removeImage } = require('../utils/cloudinary');
+const assertCorrectData = require('../utils/assertCorrectData');
 
 // Dans ce service, la validation des données se fait manuellement, comparé à user service qui utilise le package Joi
 
 async function findOwnedOfferOrThrow(data) {
-    assertValidObjectId(data.id, 'Offer');
-
     const offer = await findByIdOrThrow(Offer, data.id, 'Offer');
 
     // L'offre n'appartient pas au user connecté
@@ -24,38 +22,70 @@ async function findOwnedOfferOrThrow(data) {
     return offer;
 }
 
+const baseOfferFields = [
+    {
+        name: 'title',
+        type: 'string',
+        required: true,
+        source: 'body',
+    },
+    {
+        name: 'description',
+        type: 'string',
+        required: true,
+        source: 'body',
+    },
+    {
+        name: 'price',
+        type: 'number',
+        min: 0,
+        exclusiveMin: true,
+        required: true,
+        source: 'body',
+    },
+    {
+        name: 'condition',
+        type: 'string',
+        required: true,
+        source: 'body',
+    },
+    {
+        name: 'city',
+        type: 'string',
+        required: true,
+        source: 'body',
+    },
+    {
+        name: 'brand',
+        type: 'string',
+        required: true,
+        source: 'body',
+    },
+    {
+        name: 'size',
+        type: 'string',
+        required: true,
+        source: 'body',
+    },
+    {
+        name: 'color',
+        type: 'string',
+        required: true,
+        source: 'body',
+    },
+    {
+        name: 'picture',
+        type: 'file',
+        required: true,
+        source: 'files',
+    },
+];
+
 const publish = async (data) => {
-    const hasFiles = !!data.files;
-
-    if (!hasFiles)
-        throwError(
-            'A picture file must be sent using a param named "picture"',
-            400
-        );
-
-    if (data.body.title === undefined || data.body.title.trim() === '') {
-        throwError('Title is mandatory', 400);
-    }
-
-    if (
-        data.body.description === undefined ||
-        data.body.description.trim() === ''
-    ) {
-        throwError('Description is mandatory', 400);
-    }
-
-    if (data.body.price === undefined || data.body.price.trim() === '') {
-        throwError('Price is mandatory', 400);
-    }
+    const fields = [...baseOfferFields];
+    assertCorrectData(data, fields);
 
     const price = Number(data.body.price);
-    if (!Number.isFinite(price)) {
-        throwError('Price must be a number', 400);
-    }
-
-    if (price < 0) {
-        throwError('Price must be greater than or equal to 0', 400);
-    }
 
     // On génère un id MongoDB pour le chemin de stockage de l'image dans cloudinary
     const newOfferId = new mongoose.Types.ObjectId();
@@ -104,39 +134,20 @@ const publish = async (data) => {
 };
 
 const update = async (data) => {
-    const hasFiles = !!data.files;
-
-    if (!hasFiles)
-        throwError(
-            'A picture file must be sent using a param named "picture"',
-            400
-        );
+    const fields = [
+        ...baseOfferFields,
+        {
+            name: 'id',
+            type: 'objectId',
+            required: true,
+            source: 'params',
+        },
+    ];
+    assertCorrectData(data, fields, 'offer');
 
     const offerToUpdate = await findOwnedOfferOrThrow(data);
 
-    if (data.body.title === undefined || data.body.title.trim() === '') {
-        throwError('Title is mandatory', 400);
-    }
-
-    if (
-        data.body.description === undefined ||
-        data.body.description.trim() === ''
-    ) {
-        throwError('Description is mandatory', 400);
-    }
-
-    if (data.body.price === undefined || data.body.price.trim() === '') {
-        throwError('Price is mandatory', 400);
-    }
-
     const price = Number(data.body.price);
-    if (!Number.isFinite(price)) {
-        throwError('Price must be a number', 400);
-    }
-
-    if (price < 0) {
-        throwError('Price must be greater than or equal to 0', 400);
-    }
 
     const cloudinaryResponse = await uploadImage(data.files, data.id);
 
@@ -210,52 +221,99 @@ const update = async (data) => {
 };
 
 const updatePartial = async (data) => {
-    const offerToUpdate = await findOwnedOfferOrThrow(data);
-
-    const hasBody =
-        data.body !== undefined &&
-        ((data.body.title !== undefined && data.body.title.trim() !== '') ||
-            (data.body.description !== undefined &&
-                data.body.description.trim() !== '') ||
-            (data.body.price !== undefined && data.body.price.trim() !== '') ||
-            (data.body.brand !== undefined && data.body.brand.trim() !== '') ||
-            (data.body.size !== undefined && data.body.size.trim() !== '') ||
-            (data.body.color !== undefined && data.body.color.trim() !== '') ||
-            (data.body.condition !== undefined &&
-                data.body.condition.trim() !== '') ||
-            (data.body.city !== undefined && data.body.city.trim() !== ''));
-
+    const hasBody = !!data.body;
     const hasFiles = !!data.files;
 
     if (!hasBody && !hasFiles) {
         throwError('No data was sent', 400);
     }
 
+    const fields = [
+        {
+            name: 'id',
+            type: 'objectId',
+            required: true,
+            source: 'params',
+        },
+    ];
+
+    if (hasBody) {
+        fields.push(
+            {
+                name: 'title',
+                type: 'string',
+                required: false,
+                source: 'body',
+            },
+            {
+                name: 'description',
+                type: 'string',
+                required: false,
+                source: 'body',
+            },
+            {
+                name: 'price',
+                type: 'number',
+                min: 0,
+                exclusiveMin: true,
+                required: false,
+                source: 'body',
+            },
+            {
+                name: 'condition',
+                type: 'string',
+                required: false,
+                source: 'body',
+            },
+            {
+                name: 'city',
+                type: 'string',
+                required: false,
+                source: 'body',
+            },
+            {
+                name: 'brand',
+                type: 'string',
+                required: false,
+                source: 'body',
+            },
+            {
+                name: 'size',
+                type: 'string',
+                required: false,
+                source: 'body',
+            },
+            {
+                name: 'color',
+                type: 'string',
+                required: false,
+                source: 'body',
+            }
+        );
+    }
+
+    if (hasFiles) {
+        fields.push({
+            name: 'picture',
+            type: 'file',
+            required: false,
+            source: 'files',
+        });
+    }
+
+    assertCorrectData(data, fields, 'offer');
+
+    const offerToUpdate = await findOwnedOfferOrThrow(data);
+
     const updateFields = {};
 
     if (hasBody) {
-        let price;
-
-        if (data.body.price !== undefined && data.body.price.trim() !== '') {
-            price = Number(data.body.price);
-
-            if (!Number.isFinite(price)) {
-                throwError('Price must be a number', 400);
-            }
-
-            if (price < 0) {
-                throwError('Price must be greater than or equal to 0', 400);
-            }
-        }
-        if (data.body.title !== undefined && data.body.title.trim() !== '')
+        if (data.body.title !== undefined)
             updateFields.product_name = data.body.title;
-        if (
-            data.body.description !== undefined &&
-            data.body.description.trim() !== ''
-        )
+        if (data.body.description !== undefined)
             updateFields.product_description = data.body.description;
-        if (data.body.price !== undefined && data.body.price.trim() !== '')
-            updateFields.product_price = data.body.price;
+        if (data.body.price !== undefined)
+            updateFields.product_price = Number(data.body.price);
 
         const product_details = [...offerToUpdate.product_details];
 
@@ -337,6 +395,9 @@ const updatePartial = async (data) => {
 };
 
 const remove = async (data) => {
+    const fields = [{ name: 'id', type: 'objectId', source: 'params' }];
+    assertCorrectData(data, fields, 'offer');
+
     await findOwnedOfferOrThrow(data);
 
     let removedOffer;
@@ -381,6 +442,44 @@ const remove = async (data) => {
 };
 
 const getAll = async (data) => {
+    const fields = [
+        {
+            name: 'title',
+            type: 'string',
+            required: false,
+            source: 'query',
+        },
+        {
+            name: 'priceMin',
+            type: 'number',
+            min: 0,
+            required: false,
+            source: 'query',
+        },
+        {
+            name: 'priceMax',
+            type: 'number',
+            min: 0,
+            required: false,
+            source: 'query',
+        },
+        {
+            name: 'page',
+            type: 'number',
+            min: 0,
+            required: false,
+            source: 'query',
+        },
+        {
+            name: 'sort',
+            type: 'string',
+            required: false,
+            source: 'query',
+            options: ['price-asc', 'price-desc'],
+        },
+    ];
+    assertCorrectData(data, fields, 'offer');
+
     const filters = {};
 
     // Filtre title
@@ -392,42 +491,24 @@ const getAll = async (data) => {
     const min = data.priceMin === undefined ? undefined : Number(data.priceMin);
     const max = data.priceMax === undefined ? undefined : Number(data.priceMax);
 
-    // si priceMin ou priceMax ne sont pas des nombres strictement positifs
-    if (
-        (data.priceMin !== undefined && !Number.isFinite(min)) ||
-        (Number.isFinite(min) && min < 0) ||
-        (data.priceMax !== undefined && !Number.isFinite(max)) ||
-        (Number.isFinite(max) && max < 0)
-    ) {
-        throwError('Invalid price filter', 400);
-    }
-
-    if (Number.isFinite(min) && Number.isFinite(max) && min > max) {
-        throwError('priceMin cannot be greater than priceMax', 400);
-    }
-
     if (Number.isFinite(min) || Number.isFinite(max)) {
         filters.product_price = {};
         if (Number.isFinite(min)) filters.product_price.$gte = min;
         if (Number.isFinite(max)) filters.product_price.$lte = max;
     }
 
+    if (min !== undefined && max !== undefined && min > max) {
+        throwError('priceMin cannot be greater than priceMax', 400);
+    }
+
     // Filtre page
     const page = data.page === undefined ? 1 : Number(data.page);
-
-    if (!Number.isFinite(page) || page <= 0) {
-        throwError('Invalid page filter', 400);
-    }
 
     const nbOffersPerPage = 20;
     const nbOffersToSkip = nbOffersPerPage * (page - 1);
 
     // Filtre sort
     let sort = data.sort === undefined ? 'price-asc' : data.sort;
-
-    if (sort !== 'price-asc' && sort !== 'price-desc') {
-        throwError('Invalid sort filter', 400);
-    }
 
     sort = sort.replace('price-', '');
 
@@ -445,7 +526,10 @@ const getAll = async (data) => {
 };
 
 const getOne = async (data) => {
-    assertValidObjectId(data.id, 'Offer');
+    const fields = [
+        { name: 'id', type: 'objectId', required: true, source: 'params' },
+    ];
+    assertCorrectData(data, fields, 'offer');
 
     const offer = await findByIdOrThrow(Offer, data.id, 'Offer');
     await offer.populate('owner', '_id account');
