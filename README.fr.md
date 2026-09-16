@@ -32,8 +32,9 @@ Aucune démo n'est actuellement déployée ; voir [Démarrage](#démarrage) pour
 ## Fonctionnalités
 
 - **Authentification** : inscription et connexion avec mot de passe hashé (bcrypt) et token Bearer délivré à la connexion.
-- **Autorisation** : seul le propriétaire d'une annonce peut la modifier ou la supprimer.
+- **Autorisation** : seul le propriétaire d'une annonce, ou le compte lui-même, peut la modifier ou la supprimer.
 - **Annonces** : publication, remplacement complet (PUT) ou modification partielle (PATCH), et suppression d'une annonce, avec une photo principale et jusqu'à 5 photos secondaires hébergées sur Cloudinary.
+- **Comptes** : modifier son propre username/avatar/newsletter (PUT/PATCH) ou supprimer son propre compte (DELETE), ce qui supprime aussi toutes ses annonces.
 - **Recherche & filtres** : filtrage par titre (insensible à la casse, protégé contre le ReDoS), par fourchette de prix, tri par prix (croissant/décroissant), pagination.
 - **Gestion d'erreurs centralisée** : chaque erreur porte un statut HTTP et un message JSON ; les erreurs internes inattendues sont journalisées côté serveur mais ne fuitent jamais leurs détails au client.
 
@@ -61,6 +62,9 @@ Les routes authentifiées attendent un header `Authorization: Bearer <token>`, a
 | POST    | `/users/signup`   | —                            | Créer un compte. Corps : `email`, `password` (6 caractères min.), `username`, `newsletter` (optionnel).                                                                                                     |
 | POST    | `/users/login`    | —                            | Se connecter. Corps : `email`, `password`.                                                                                                                                                                  |
 | GET     | `/users/:id`      | —                            | Récupérer le profil public d'un utilisateur (`_id`, `account.username`, `account.avatar`, `newsletter`).                                                                                                    |
+| PUT     | `/users/:id`      | ✅ (soi-même uniquement)     | Remplacer son profil. `multipart/form-data` : `username` (requis), `avatar` (fichier, optionnel) et `newsletter` optionnels — omettre `avatar` le laisse inchangé, il n'est jamais vidé implicitement.      |
+| PATCH   | `/users/:id`      | ✅ (soi-même uniquement)     | Modifier partiellement son profil — n'envoyer que `username`, `avatar` et/ou `newsletter`.                                                                                                                  |
+| DELETE  | `/users/:id`      | ✅ (soi-même uniquement)     | Supprimer son propre compte, avec suppression en cascade de toutes ses annonces (et leurs images Cloudinary).                                                                                               |
 | POST    | `/offers/publish` | ✅                           | Publier une annonce. `multipart/form-data` : `title`, `description`, `price`, `brand`, `size`, `color`, `condition`, `city`, un fichier `picture` obligatoire, et jusqu'à 5 fichiers `pictures` optionnels. |
 | GET     | `/offers`         | —                            | Lister les annonces. Paramètres de requête : `title`, `priceMin`, `priceMax`, `sort` (`price-asc` \| `price-desc`, croissant par défaut), `page` (défaut 1, 20 par page).                                   |
 | GET     | `/offers/:id`     | —                            | Récupérer une annonce.                                                                                                                                                                                      |
@@ -177,7 +181,7 @@ Le serveur se connecte à MongoDB et à Cloudinary au démarrage, et refuse de d
 
 - Les mots de passe sont hashés avec **bcrypt** (10 tours de salage) — jamais stockés ni renvoyés en clair.
 - L'authentification repose sur un token opaque aléatoire (`uid2`), vérifié en base à chaque requête vers une route protégée, via le middleware `isAuthenticated`.
-- La propriété est vérifiée côté serveur, de façon atomique avec l'écriture elle-même (un seul `findOneAndUpdate`/`findOneAndDelete` filtré par `{ _id, owner }`) : une annonce qui existe mais appartient à quelqu'un d'autre renvoie `404`, comme une annonce inexistante, pour qu'un non-propriétaire ne puisse pas distinguer les deux cas.
+- La propriété est vérifiée côté serveur, de façon atomique avec l'écriture elle-même (un seul `findOneAndUpdate`/`findOneAndDelete` filtré par `{ _id, owner }`) : une annonce qui existe mais appartient à quelqu'un d'autre renvoie `404`, comme une annonce inexistante, pour qu'un non-propriétaire ne puisse pas distinguer les deux cas. Les routes de compte (`PUT`/`PATCH`/`DELETE /users/:id`) renvoient `403` à la place pour le même cas — `GET /users/:id` étant déjà public, cacher l'existence d'un compte n'apporterait rien ici.
 - Joi valide et nettoie les entrées de toutes les routes avant qu'elles n'atteignent la base de données.
 - L'endpoint de recherche par titre échappe les caractères spéciaux de regex avant de construire le pattern de recherche, fermant un vecteur de ReDoS (une chaîne fournie par l'utilisateur, utilisée telle quelle comme source de regex, peut déclencher un backtracking catastrophique).
 - Le gestionnaire d'erreur global renvoie un message générique `Internal server error` pour les erreurs inattendues et journalise l'erreur réelle uniquement côté serveur — aucune stack trace ni détail interne ne fuite jamais au client.

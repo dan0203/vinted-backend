@@ -32,8 +32,9 @@ No demo is currently deployed; see [Getting started](#getting-started) to run it
 ## Features
 
 - **Authentication**: signup and login with hashed passwords (bcrypt) and a Bearer token issued on success.
-- **Authorization**: only the owner of an offer can update or delete it.
+- **Authorization**: only the owner of an offer, or the account itself, can update or delete it.
 - **Listings (offers)**: publish, fully replace (PUT) or partially update (PATCH), and delete a product listing, with a main picture plus up to 5 secondary pictures uploaded to Cloudinary.
+- **Accounts**: update your own username/avatar/newsletter (PUT/PATCH) or delete your own account (DELETE), which also removes all of your offers.
 - **Search & filtering**: filter offers by title (case-insensitive, ReDoS-safe), price range, and sort by price (ascending/descending), with pagination.
 - **Centralized error handling**: every error carries an HTTP status and a JSON message; unexpected/internal errors are logged server-side but never leak their details to the client.
 
@@ -61,6 +62,9 @@ Authenticated routes expect an `Authorization: Bearer <token>` header, using the
 | POST   | `/users/signup`   | —               | Create an account. Body: `email`, `password` (min 6 chars), `username`, `newsletter` (optional).                                                                                              |
 | POST   | `/users/login`    | —               | Log in. Body: `email`, `password`.                                                                                                                                                            |
 | GET    | `/users/:id`      | —               | Get a user's public profile (`_id`, `account.username`, `account.avatar`, `newsletter`).                                                                                                      |
+| PUT    | `/users/:id`      | ✅ (self only)  | Replace a user's profile. `multipart/form-data`: `username` (required), optional `avatar` file and `newsletter` — omitting `avatar` leaves it unchanged, it's never cleared implicitly.       |
+| PATCH  | `/users/:id`      | ✅ (self only)  | Partially update a user's profile — send only `username`, `avatar` and/or `newsletter`.                                                                                                       |
+| DELETE | `/users/:id`      | ✅ (self only)  | Delete a user's own account, cascading to all of their offers (and Cloudinary images).                                                                                                        |
 | POST   | `/offers/publish` | ✅              | Publish a new offer. `multipart/form-data`: `title`, `description`, `price`, `brand`, `size`, `color`, `condition`, `city`, a required `picture` file, and up to 5 optional `pictures` files. |
 | GET    | `/offers`         | —               | List offers. Query params: `title`, `priceMin`, `priceMax`, `sort` (`price-asc` \| `price-desc`, default ascending), `page` (default 1, 20 per page).                                         |
 | GET    | `/offers/:id`     | —               | Get a single offer.                                                                                                                                                                           |
@@ -177,7 +181,7 @@ The server connects to MongoDB and Cloudinary on startup and refuses to start if
 
 - Passwords are hashed with **bcrypt** (10 salt rounds) — never stored or returned in plain text.
 - Authentication uses a random opaque token (`uid2`) checked against the database on every request to a protected route, via the `isAuthenticated` middleware.
-- Ownership is enforced server-side, atomically with the write itself (a single `findOneAndUpdate`/`findOneAndDelete` filtered by `{ _id, owner }`): an offer that exists but belongs to someone else returns `404`, the same as a non-existent one, so a non-owner can't distinguish the two.
+- Ownership is enforced server-side, atomically with the write itself (a single `findOneAndUpdate`/`findOneAndDelete` filtered by `{ _id, owner }`): an offer that exists but belongs to someone else returns `404`, the same as a non-existent one, so a non-owner can't distinguish the two. User account routes (`PUT`/`PATCH`/`DELETE /users/:id`) use `403` instead for the same mismatch — `GET /users/:id` is already public, so hiding an account's existence wouldn't add anything there.
 - Joi validates and sanitizes input on every route before it reaches the database.
 - The title search endpoint escapes regex special characters before building the search pattern, closing a ReDoS vector (an unescaped user-supplied string used directly as a regex source can trigger catastrophic backtracking).
 - The global error handler returns a generic `Internal server error` message for unexpected errors and logs the real error server-side only — it never leaks stack traces or internals to the client.
