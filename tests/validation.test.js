@@ -10,10 +10,10 @@ describe('sanitizeMongo', () => {
         const req = {
             body: {
                 email: 'jane@example.com',
-                '$where': 'this.password.length > 0',
-                filter: { '$gt': '' },
+                $where: 'this.password.length > 0',
+                filter: { $gt: '' },
                 'a.b': 'value',
-                nested: { safe: 'ok', '$or': [{ a: 1 }] },
+                nested: { safe: 'ok', $or: [{ a: 1 }] },
             },
         };
         const next = jest.fn();
