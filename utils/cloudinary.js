@@ -74,6 +74,24 @@ async function uploadImages(files, id) {
     return uploaded;
 }
 
+// Upload l'avatar (champ "avatar", optionnel contrairement à "picture" pour
+// les offres) : renvoie undefined si aucun fichier n'a été envoyé.
+async function uploadAvatar(files, id) {
+    if (!files || !files.avatar) {
+        return undefined;
+    }
+
+    const base64Image = convertToBase64(files.avatar);
+
+    try {
+        return await cloudinary.uploader.upload(base64Image, {
+            asset_folder: `vinted/users/${id}`,
+        });
+    } catch (error) {
+        throwError(`Upload Cloudinary failed: ${error.message}`, 500);
+    }
+}
+
 async function removeImage(publicId) {
     if (!publicId) {
         throwError(`Remove Cloudinary failed: incorrect data`, 400);
@@ -87,14 +105,20 @@ async function removeImage(publicId) {
 }
 
 // Cloudinary exige un dossier vide avant de le supprimer : tous les assets
-// qu'il contient (image + pictures) doivent déjà avoir été détruits via
-// removeImage() avant d'appeler celle-ci.
-async function deleteOfferFolder(id) {
+// qu'il contient doivent déjà avoir été détruits via removeImage() avant
+// d'appeler celle-ci.
+async function deleteFolder(folderPath) {
     try {
-        await cloudinary.api.delete_folder(`vinted/offers/${id}`);
+        await cloudinary.api.delete_folder(folderPath);
     } catch (error) {
         throwError(`Remove Cloudinary failed: ${error.message}`, 500);
     }
 }
 
-module.exports = { uploadImage, uploadImages, removeImage, deleteOfferFolder };
+module.exports = {
+    uploadImage,
+    uploadImages,
+    uploadAvatar,
+    removeImage,
+    deleteFolder,
+};

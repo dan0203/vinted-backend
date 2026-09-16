@@ -6,12 +6,12 @@ const Offer = require('../models/Offer');
 // Utils
 const throwError = require('../utils/throwError');
 const escapeRegex = require('../utils/escapeRegex');
+const { uploadImage, uploadImages } = require('../utils/cloudinary');
 const {
-    uploadImage,
-    uploadImages,
-    removeImage,
-    deleteOfferFolder,
-} = require('../utils/cloudinary');
+    safeRemoveImage,
+    safeDeleteFolder,
+    withImageRollback,
+} = require('../utils/cloudinaryCleanup');
 const joiObjectId = require('../utils/joiObjectId');
 const {
     MIN_PRICE,
@@ -140,41 +140,19 @@ function toOfferDTO(offer) {
     };
 }
 
-// Log non bloquant : on ne fait jamais échouer une opération réussie en DB
-// à cause d'un nettoyage Cloudinary qui échoue derrière.
-async function safeRemoveImage(publicId, logLabel) {
-    if (!publicId) return;
-
-    try {
-        await removeImage(publicId);
-    } catch (error) {
-        console.error(logLabel, error.error?.message || error.message || error);
-    }
-}
-
-async function safeDeleteOfferFolder(offerId) {
-    try {
-        await deleteOfferFolder(offerId);
-    } catch (error) {
-        console.error(
-            'Failed deleting offer folder',
-            error.error?.message || error.message || error
-        );
-    }
-}
-
-// Si `operation` échoue, on supprime les images qu'on venait d'uploader
-// (`uploadedImages`, réponses Cloudinary avec un `public_id`) pour ne pas
-// en laisser d'orphelines.
-async function withImageRollback(uploadedImages, operation) {
-    try {
-        return await operation();
-    } catch (error) {
-        await Promise.allSettled(
-            uploadedImages.map((image) => removeImage(image?.public_id))
-        );
-        throw error;
-    }
+// Supprime image + pictures + le dossier de l'offre sur Cloudinary (best
+// effort, non bloquant), réutilisé par remove() et removeAllByOwner().
+async function cleanupOfferImages(offer) {
+    await safeRemoveImage(offer.image.public_id, 'Failed removing image');
+    await Promise.all(
+        offer.pictures.map((picture) =>
+            safeRemoveImage(picture.public_id, 'Failed removing picture')
+        )
+    );
+    await safeDeleteFolder(
+        `vinted/offers/${offer._id}`,
+        'Failed deleting offer folder'
+    );
 }
 
 function assertPictureCountWithinLimit(files) {
@@ -372,18 +350,9 @@ const remove = async (data) => {
         populate
     );
 
-    // Si tout s'est bien passé, on supprime les images du dossier, puis le
-    // dossier lui-même (Cloudinary exige qu'il soit vide) dans Cloudinary
-    await safeRemoveImage(
-        removedOffer.image.public_id,
-        'Failed removing image'
-    );
-    await Promise.all(
-        removedOffer.pictures.map((picture) =>
-            safeRemoveImage(picture.public_id, 'Failed removing picture')
-        )
-    );
-    await safeDeleteOfferFolder(removedOffer._id);
+    // Si tout s'est bien passé, on supprime les images puis le dossier de
+    // l'offre dans Cloudinary
+    await cleanupOfferImages(removedOffer);
 
     return toOfferDTO(removedOffer);
 };

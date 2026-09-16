@@ -25,7 +25,7 @@ jest.mock('../utils/cloudinary', () => ({
         );
     }),
     removeImage: jest.fn().mockResolvedValue(undefined),
-    deleteOfferFolder: jest.fn().mockResolvedValue(undefined),
+    deleteFolder: jest.fn().mockResolvedValue(undefined),
 }));
 
 // Un petit buffer suffit : express-fileupload n'a besoin que d'un fichier
@@ -493,7 +493,7 @@ describe('DELETE /offers/:id', () => {
 
         const removeImageCallsBefore = cloudinary.removeImage.mock.calls.length;
         const deleteFolderCallsBefore =
-            cloudinary.deleteOfferFolder.mock.calls.length;
+            cloudinary.deleteFolder.mock.calls.length;
 
         const response = await request(app)
             .delete(`/offers/${offerWithPicturesId}`)
@@ -504,7 +504,7 @@ describe('DELETE /offers/:id', () => {
         expect(cloudinary.removeImage.mock.calls.length).toBe(
             removeImageCallsBefore + 3
         );
-        expect(cloudinary.deleteOfferFolder.mock.calls.length).toBe(
+        expect(cloudinary.deleteFolder.mock.calls.length).toBe(
             deleteFolderCallsBefore + 1
         );
     });
