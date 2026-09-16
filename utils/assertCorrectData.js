@@ -123,6 +123,8 @@ function assertCorrectData(data, fields = [], schema = '') {
                     throwError(`${capitalize(f.name)} must be a number`, 400);
                 }
 
+                dataObj[f.name] = Number(dataObj[f.name]);
+
                 if (f.min !== undefined) {
                     const isExclusive = f.exclusiveMin === true;
                     const isInvalid = isExclusive

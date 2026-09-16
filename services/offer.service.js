@@ -5,7 +5,6 @@ const Offer = require('../models/Offer');
 // Utils
 const throwError = require('../utils/throwError');
 const escapeRegex = require('../utils/escapeRegex');
-const findByIdOrThrow = require('../utils/findByIdOrThrow');
 const { uploadImage, removeImage } = require('../utils/cloudinary');
 const assertCorrectData = require('../utils/assertCorrectData');
 const {
@@ -38,19 +37,16 @@ const {
     FIELD_NAME_PAGE,
     FIELD_NAME_SORT,
 } = require('../utils/constants');
+const {
+    findByIdOrThrow,
+    findByIdAndDeleteOrThrow,
+    findAll,
+    findByIdAndUpdateOrThrow,
+    save,
+} = require('../utils/mongooseOrThrow');
+const findOwnedOfferOrThrow = require('../utils/findOwnedOfferOrThrow');
 
 // Dans ce service, la validation des données se fait manuellement, comparé à user service qui utilise le package Joi
-
-async function findOwnedOfferOrThrow(data) {
-    const offer = await findByIdOrThrow(Offer, data.id, OFFER);
-
-    // L'offre n'appartient pas au user connecté
-    if (!data.user._id.equals(offer.owner._id)) {
-        throwError('Unauthorized', 403);
-    }
-
-    return offer;
-}
 
 const baseOfferFields = [
     {
@@ -111,11 +107,20 @@ const baseOfferFields = [
     },
 ];
 
+const populate = {
+    path: 'owner',
+    select: '_id account',
+};
+const publishOrUpdateOptions = {
+    returnDocument: 'after',
+    runValidators: true,
+};
+
 const publish = async (data) => {
     const fields = [...baseOfferFields];
     assertCorrectData(data, fields);
 
-    const price = Number(data.body.price);
+    const price = data.body.price;
 
     // On génère un id MongoDB pour le chemin de stockage de l'image dans cloudinary
     const newOfferId = new mongoose.Types.ObjectId();
@@ -149,18 +154,18 @@ const publish = async (data) => {
         owner: data.user._id,
     });
 
+    let publishedOffer;
     try {
-        await newOffer.save();
+        publishedOffer = await save(newOffer, populate);
     } catch (error) {
-        if (cloudinaryResponse.public_id) {
-            await removeImage(cloudinaryResponse.public_id, newOfferId);
+        if (cloudinaryResponse?.public_id) {
+            await removeImage(cloudinaryResponse.public_id);
         }
+
         throw error;
     }
 
-    await newOffer.populate('owner', '_id account');
-
-    return newOffer;
+    return publishedOffer;
 };
 
 const update = async (data) => {
@@ -175,13 +180,13 @@ const update = async (data) => {
     ];
     assertCorrectData(data, fields, OFFER);
 
-    const offerToUpdate = await findOwnedOfferOrThrow(data);
+    const offerToUpdate = await findOwnedOfferOrThrow(data.id, data.user._id);
 
-    const price = Number(data.body.price);
+    const price = data.body.price;
 
     const cloudinaryResponse = await uploadImage(data.files, data.id);
 
-    const updateData = {
+    const updateFields = {
         product_name: data.body.title,
         product_description: data.body.description,
         product_price: price,
@@ -208,30 +213,22 @@ const update = async (data) => {
     };
 
     let updatedOffer;
-
     try {
-        updatedOffer = await Offer.findByIdAndUpdate(data.id, updateData, {
-            returnDocument: 'after',
-            runValidators: true,
-        });
+        updatedOffer = await findByIdAndUpdateOrThrow(
+            Offer,
+            data.id,
+            OFFER,
+            updateFields,
+            publishOrUpdateOptions,
+            populate
+        );
     } catch (error) {
-        if (cloudinaryResponse.public_id) {
+        if (cloudinaryResponse?.public_id) {
             await removeImage(cloudinaryResponse.public_id);
         }
+
         throw error;
     }
-
-    // S'il y a une erreur dans findByIdAndUpdate, il renvoie un élément vide
-    // Dans ce cas, supprimer l'image que l'on vient d'uploader et lever une exception
-    if (!updatedOffer) {
-        if (cloudinaryResponse.public_id) {
-            await removeImage(cloudinaryResponse.public_id);
-        }
-
-        throwError('Failed to update offer', 500);
-    }
-
-    await updatedOffer.populate('owner', '_id account');
 
     const updatedOfferToReturn = {
         product_name: updatedOffer.product_name,
@@ -244,7 +241,14 @@ const update = async (data) => {
 
     // Si tout s'est bien passé, on supprime l'ancienne image
     if (offerToUpdate.product_image.public_id) {
-        await removeImage(offerToUpdate.product_image.public_id);
+        try {
+            await removeImage(offerToUpdate.product_image.public_id);
+        } catch (error) {
+            console.error(
+                'Failed removing old image',
+                error.error?.message || error.message || error
+            );
+        }
     }
 
     return updatedOfferToReturn;
@@ -333,7 +337,7 @@ const updatePartial = async (data) => {
 
     assertCorrectData(data, fields, OFFER);
 
-    const offerToUpdate = await findOwnedOfferOrThrow(data);
+    const offerToUpdate = await findOwnedOfferOrThrow(data.id, data.user._id);
 
     const updateFields = {};
 
@@ -343,7 +347,7 @@ const updatePartial = async (data) => {
         if (data.body.description !== undefined)
             updateFields.product_description = data.body.description;
         if (data.body.price !== undefined)
-            updateFields.product_price = Number(data.body.price);
+            updateFields.product_price = data.body.price;
 
         const product_details = [...offerToUpdate.product_details];
 
@@ -386,23 +390,21 @@ const updatePartial = async (data) => {
 
     let updatedOffer;
     try {
-        updatedOffer = await Offer.findByIdAndUpdate(data.id, updateFields, {
-            returnDocument: 'after',
-            runValidators: true,
-        });
-
-        // S'il y a une erreur dans findByIdAndUpdate, il renvoie un élément vide
-        // Dans ce cas, supprimer l'image que l'on vient d'uploader et lever une exception
-        if (!updatedOffer) {
-            throwError('Failed to update offer', 500);
-        }
+        updatedOffer = await findByIdAndUpdateOrThrow(
+            Offer,
+            data.id,
+            OFFER,
+            updateFields,
+            publishOrUpdateOptions,
+            populate
+        );
     } catch (error) {
-        await removeImage(cloudinaryResponse.public_id);
+        if (cloudinaryResponse?.public_id) {
+            await removeImage(cloudinaryResponse.public_id);
+        }
 
         throw error;
     }
-
-    await updatedOffer.populate('owner', '_id account');
 
     const updatedOfferToReturn = {
         product_name: updatedOffer.product_name,
@@ -418,7 +420,14 @@ const updatePartial = async (data) => {
         cloudinaryResponse !== undefined &&
         offerToUpdate.product_image.public_id
     ) {
-        await removeImage(offerToUpdate.product_image.public_id);
+        try {
+            await removeImage(offerToUpdate.product_image.public_id);
+        } catch (error) {
+            console.error(
+                'Failed removing old image',
+                error.error?.message || error.message || error
+            );
+        }
     }
 
     return updatedOfferToReturn;
@@ -430,20 +439,14 @@ const remove = async (data) => {
     ];
     assertCorrectData(data, fields, OFFER);
 
-    await findOwnedOfferOrThrow(data);
+    await findOwnedOfferOrThrow(data.id, data.user._id);
 
-    let removedOffer;
-
-    removedOffer = await Offer.findByIdAndDelete(data.id).populate(
-        'owner',
-        '_id account'
+    const removedOffer = await findByIdAndDeleteOrThrow(
+        Offer,
+        data.id,
+        OFFER,
+        populate
     );
-
-    // S'il y a une erreur dans findByIdAndDelete, il renvoie un élément vide
-    // Dans ce cas, lever une exception
-    if (!removedOffer) {
-        throwError('Offer does not exist', 404);
-    }
 
     // Si tout s'est bien passé, on supprime les images du dossier et le dossier lui-même dans Cloudinary
     if (removedOffer.product_image.public_id) {
@@ -454,7 +457,7 @@ const remove = async (data) => {
             );
         } catch (error) {
             console.error(
-                'Cloudinary cleanup failed:',
+                'Failed removing image',
                 error.error?.message || error.message || error
             );
         }
@@ -520,39 +523,38 @@ const getAll = async (data) => {
     }
 
     // Filtres priceMin et priceMax
-    const min = data.priceMin === undefined ? undefined : Number(data.priceMin);
-    const max = data.priceMax === undefined ? undefined : Number(data.priceMax);
-
-    if (Number.isFinite(min) || Number.isFinite(max)) {
-        filters.product_price = {};
-        if (Number.isFinite(min)) filters.product_price.$gte = min;
-        if (Number.isFinite(max)) filters.product_price.$lte = max;
-    }
+    const min = data.priceMin === undefined ? undefined : data.priceMin;
+    const max = data.priceMax === undefined ? undefined : data.priceMax;
 
     if (min !== undefined && max !== undefined && min > max) {
         throwError('priceMin cannot be greater than priceMax', 400);
     }
 
-    // Filtre page
-    const page = data.page === undefined ? 1 : Number(data.page);
+    if (min !== undefined || max !== undefined) {
+        filters.product_price = {};
+        if (min !== undefined) filters.product_price.$gte = min;
+        if (max !== undefined) filters.product_price.$lte = max;
+    }
 
-    const nbOffersPerPage = OFFERS_PER_PAGE;
-    const nbOffersToSkip = nbOffersPerPage * (page - 1);
+    // Filtre page
+    const page = data.page === undefined ? 1 : data.page;
+    const limit = OFFERS_PER_PAGE;
+    const skip = limit * (page - 1);
 
     // Filtre sort
-    let sort = data.sort === undefined ? FIELD_SORT_OPTIONS[0] : data.sort;
-
-    sort = sort.replace('price-', '');
+    const sort = data.sort === undefined ? FIELD_SORT_OPTIONS[0] : data.sort;
+    const direction = sort.replace('price-', '');
+    const sortBy = { product_price: direction };
 
     // Récupération des offres correspondant aux filtres et à la page demandés
-    const offers = await Offer.find(filters)
-        .populate('owner', '_id account')
-        .sort({ product_price: sort })
-        .limit(nbOffersPerPage)
-        .skip(nbOffersToSkip);
-
-    // Nombre de documents correspondant aux filtres
-    const count = await Offer.countDocuments(filters);
+    const [offers, count] = await findAll(
+        Offer,
+        filters,
+        sortBy,
+        limit,
+        skip,
+        populate
+    );
 
     return { count, offers };
 };
@@ -568,8 +570,7 @@ const getOne = async (data) => {
     ];
     assertCorrectData(data, fields, OFFER);
 
-    const offer = await findByIdOrThrow(Offer, data.id, OFFER);
-    await offer.populate('owner', '_id account');
+    const offer = await findByIdOrThrow(Offer, data.id, OFFER, populate);
 
     return {
         _id: offer._id,

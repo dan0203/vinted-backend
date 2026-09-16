@@ -8,7 +8,7 @@ const uid2 = require('uid2');
 // Utils
 const throwError = require('../utils/throwError');
 const assertValidObjectId = require('../utils/assertValidObjectId');
-const findByIdOrThrow = require('../utils/findByIdOrThrow');
+const { findByIdOrThrow } = require('../utils/mongooseOrThrow');
 const { USER } = require('../utils/constants');
 
 // Dans ce service, la validation des données se fait grâce au package Joi, comparé à offer service où on les effectue manuellement
