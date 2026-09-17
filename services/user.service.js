@@ -26,6 +26,7 @@ const {
 const {
     USER,
     OFFER,
+    MAX_FAVORITES,
     ACCESS_TOKEN_TTL,
     REFRESH_TOKEN_TTL_MS,
     MAX_LOGIN_ATTEMPTS,
@@ -486,6 +487,14 @@ const addFavorite = async (data) => {
     assertValidObjectId(data.params.offerId, OFFER);
 
     await findByIdOrThrow(Offer, data.params.offerId, OFFER);
+
+    const currentUser = await findByIdOrThrow(User, data.params.id, USER);
+    if (
+        currentUser.favorites.length >= MAX_FAVORITES &&
+        !currentUser.favorites.some((id) => String(id) === data.params.offerId)
+    ) {
+        throwError(`You can only favorite up to ${MAX_FAVORITES} offers`, 400);
+    }
 
     const updatedUser = await findByIdAndUpdateOrThrow(
         User,

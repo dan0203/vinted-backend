@@ -4,6 +4,7 @@ const MIN_PRICEMAX = 0;
 const MIN_PAGE = 1;
 const OFFERS_PER_PAGE = 20;
 const MAX_PICTURES = 5;
+const MAX_FAVORITES = 500;
 const FIELD_SORT_OPTIONS = ['price-asc', 'price-desc'];
 const OFFER = 'offer';
 const USER = 'user';
@@ -21,6 +22,7 @@ module.exports = {
     MIN_PAGE,
     OFFERS_PER_PAGE,
     MAX_PICTURES,
+    MAX_FAVORITES,
     FIELD_SORT_OPTIONS,
     OFFER,
     USER,
