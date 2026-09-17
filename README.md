@@ -7,10 +7,10 @@ A RESTful backend API for a Vinted-inspired second-hand clothing marketplace: to
 ![CI](https://github.com/dan0203/vinted-backend/actions/workflows/ci.yml/badge.svg)
 ![License](https://img.shields.io/badge/license-MIT-blue.svg)
 ![Node](https://img.shields.io/badge/node-%3E%3D18-339933?logo=node.js&logoColor=white)
-![Statements](https://img.shields.io/badge/statements-87.69%25-yellow.svg?style=flat)
-![Branches](https://img.shields.io/badge/branches-71.24%25-red.svg?style=flat)
-![Functions](https://img.shields.io/badge/functions-83.06%25-yellow.svg?style=flat)
-![Lines](https://img.shields.io/badge/lines-88.29%25-yellow.svg?style=flat)
+![Statements](https://img.shields.io/badge/statements-96.34%25-brightgreen.svg?style=flat)
+![Branches](https://img.shields.io/badge/branches-85.4%25-yellow.svg?style=flat)
+![Functions](https://img.shields.io/badge/functions-96.77%25-brightgreen.svg?style=flat)
+![Lines](https://img.shields.io/badge/lines-96.63%25-brightgreen.svg?style=flat)
 
 ## Table of contents
 

@@ -11,7 +11,8 @@ const email = require('../utils/email');
 const User = require('../models/User');
 const Offer = require('../models/Offer');
 const jwt = require('jsonwebtoken');
-const { MAX_LOGIN_ATTEMPTS } = require('../utils/constants');
+const mongoose = require('mongoose');
+const { MAX_LOGIN_ATTEMPTS, MAX_FAVORITES } = require('../utils/constants');
 
 // Mocks the Resend wrapper for signup/confirm/resend so no real network
 // call is made and tests can assert on which emails were sent.
@@ -1049,6 +1050,40 @@ describe('favorites', () => {
                 .set('Authorization', `Bearer ${token}`);
 
             expect(response.status).toBe(400);
+        });
+
+        it('rejects favoriting a new offer once the account is at the cap', async () => {
+            const filler = Array.from(
+                { length: MAX_FAVORITES },
+                () => new mongoose.Types.ObjectId()
+            );
+            await User.findByIdAndUpdate(userId, { favorites: filler });
+
+            const response = await request(app)
+                .post(`/users/${userId}/favorites/${offerId}`)
+                .set('Authorization', `Bearer ${token}`);
+
+            expect(response.status).toBe(400);
+            expect(response.body.message).toContain(
+                `up to ${MAX_FAVORITES} offers`
+            );
+        });
+
+        it('still allows re-favoriting an offer already in the list once at the cap', async () => {
+            const filler = Array.from(
+                { length: MAX_FAVORITES - 1 },
+                () => new mongoose.Types.ObjectId()
+            );
+            await User.findByIdAndUpdate(userId, {
+                favorites: [...filler, offerId],
+            });
+
+            const response = await request(app)
+                .post(`/users/${userId}/favorites/${offerId}`)
+                .set('Authorization', `Bearer ${token}`);
+
+            expect(response.status).toBe(200);
+            expect(response.body.favorites).toHaveLength(MAX_FAVORITES);
         });
     });
 
