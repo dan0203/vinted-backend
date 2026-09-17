@@ -10,7 +10,8 @@ const cloudinary = require('../utils/cloudinary');
 const email = require('../utils/email');
 const User = require('../models/User');
 const Offer = require('../models/Offer');
-const { MAX_TOKEN_AGE_MS, MAX_LOGIN_ATTEMPTS } = require('../utils/constants');
+const jwt = require('jsonwebtoken');
+const { MAX_LOGIN_ATTEMPTS } = require('../utils/constants');
 
 // Mocks the Resend wrapper for signup/confirm/resend so no real network
 // call is made and tests can assert on which emails were sent.
@@ -61,8 +62,23 @@ describe('POST /users/signup', () => {
         });
 
         expect(response.status).toBe(201);
-        expect(response.body).toHaveProperty('token');
+        expect(response.body).toHaveProperty('accessToken');
         expect(response.body.account.username).toBe('jane');
+    });
+
+    it('sets the refresh cookie as httpOnly and SameSite=Lax', async () => {
+        const response = await request(app).post('/users/signup').send({
+            email: 'jane@example.com',
+            password: 'secret123',
+            username: 'jane',
+        });
+
+        const setCookie = response.headers['set-cookie'][0];
+        expect(setCookie).toMatch(/HttpOnly/);
+        expect(setCookie).toMatch(/SameSite=Lax/);
+        // NODE_ENV is 'test' here, not 'production', so Secure is correctly
+        // absent - see refreshCookieOptions() in user.controller.js.
+        expect(setCookie).not.toMatch(/Secure/);
     });
 
     // This test never touches the DB: Joi rejects the request before any Mongo access
@@ -125,7 +141,7 @@ describe('POST /users/login', () => {
         });
 
         expect(response.status).toBe(200);
-        expect(response.body).toHaveProperty('token');
+        expect(response.body).toHaveProperty('accessToken');
     });
 
     it('rejects a wrong password', async () => {
@@ -217,7 +233,7 @@ describe('authenticated routes on an unconfirmed account', () => {
 
         const response = await request(app)
             .patch(`/users/${signupResponse.body._id}`)
-            .set('Authorization', `Bearer ${signupResponse.body.token}`)
+            .set('Authorization', `Bearer ${signupResponse.body.accessToken}`)
             .field('newsletter', 'true');
 
         expect(response.status).toBe(403);
@@ -439,7 +455,7 @@ describe('password reset', () => {
     });
 
     describe('POST /users/reset/confirm', () => {
-        it('resets the password, invalidates the old token, and allows login with the new password', async () => {
+        it('resets the password, invalidates the old refresh session, and allows login with the new password', async () => {
             const signupResponse = await request(app)
                 .post('/users/signup')
                 .send({
@@ -448,7 +464,8 @@ describe('password reset', () => {
                     username: 'jane',
                 });
             await activateUser('jane@example.com');
-            const oldToken = signupResponse.body.token;
+            const oldRefreshCookie =
+                signupResponse.headers['set-cookie'][0].split(';')[0];
 
             await request(app)
                 .post('/users/reset/request')
@@ -464,6 +481,7 @@ describe('password reset', () => {
             const updatedUser = await User.findById(user._id);
             expect(updatedUser.resetToken).toBeNull();
             expect(updatedUser.resetTokenExpiresAt).toBeNull();
+            expect(updatedUser.refreshToken).toBeNull();
 
             const oldLogin = await request(app).post('/users/login').send({
                 email: 'jane@example.com',
@@ -477,11 +495,13 @@ describe('password reset', () => {
             });
             expect(newLogin.status).toBe(200);
 
-            const authedWithOldToken = await request(app)
-                .patch(`/users/${user._id}`)
-                .set('Authorization', `Bearer ${oldToken}`)
-                .field('username', 'stillJane');
-            expect(authedWithOldToken.status).toBe(401);
+            // The old JWT access token isn't tracked server-side, so it stays
+            // valid for the rest of its own short lifetime - only the
+            // refresh session (which controls renewal) is cut off immediately.
+            const refreshWithOldCookie = await request(app)
+                .post('/users/refresh')
+                .set('Cookie', oldRefreshCookie);
+            expect(refreshWithOldCookie.status).toBe(401);
         });
 
         it('clears a stale lockout on a successful reset', async () => {
@@ -573,7 +593,7 @@ const testsCommonToSelfOnlyMethods = (method, getUserId, attachFields) => {
         const response = await attachFields(
             request(app)
                 [method](`/users/${getUserId()}`)
-                .set('Authorization', `Bearer ${otherSignup.body.token}`)
+                .set('Authorization', `Bearer ${otherSignup.body.accessToken}`)
         );
 
         expect(response.status).toBe(403);
@@ -591,7 +611,7 @@ describe('PUT /users/:id', () => {
             username: 'jane',
         });
         userId = signupResponse.body._id;
-        token = signupResponse.body.token;
+        token = signupResponse.body.accessToken;
         await activateUser('jane@example.com');
     });
 
@@ -661,26 +681,151 @@ describe('PUT /users/:id', () => {
 });
 
 describe('token expiration', () => {
-    it('rejects a token older than the max age', async () => {
+    it('rejects an expired access token', async () => {
         const signupResponse = await request(app).post('/users/signup').send({
             email: 'expired@example.com',
             password: 'secret123',
             username: 'expired',
         });
         const userId = signupResponse.body._id;
-        const token = signupResponse.body.token;
+        await User.findByIdAndUpdate(userId, { active: true });
 
-        await User.findByIdAndUpdate(userId, {
-            active: true,
-            tokenIssuedAt: new Date(Date.now() - MAX_TOKEN_AGE_MS - 1000),
+        const expiredToken = jwt.sign({ sub: userId }, process.env.JWT_SECRET, {
+            expiresIn: '-1s',
         });
 
         const response = await request(app)
             .put(`/users/${userId}`)
-            .set('Authorization', `Bearer ${token}`)
+            .set('Authorization', `Bearer ${expiredToken}`)
             .field('username', 'stillexpired');
 
         expect(response.status).toBe(401);
+    });
+
+    it('rejects a token with a bad signature', async () => {
+        const signupResponse = await request(app).post('/users/signup').send({
+            email: 'tampered@example.com',
+            password: 'secret123',
+            username: 'tampered',
+        });
+        const userId = signupResponse.body._id;
+        await User.findByIdAndUpdate(userId, { active: true });
+
+        const forgedToken = jwt.sign({ sub: userId }, 'wrong-secret', {
+            expiresIn: '15m',
+        });
+
+        const response = await request(app)
+            .put(`/users/${userId}`)
+            .set('Authorization', `Bearer ${forgedToken}`)
+            .field('username', 'stillforged');
+
+        expect(response.status).toBe(401);
+    });
+});
+
+describe('POST /users/refresh', () => {
+    const signupAndActivate = async (email = 'jane@example.com') => {
+        const signupResponse = await request(app).post('/users/signup').send({
+            email,
+            password: 'secret123',
+            username: 'jane',
+        });
+        await activateUser(email);
+
+        return signupResponse;
+    };
+
+    const cookieHeader = (response) => response.headers['set-cookie'][0];
+    const cookieValue = (setCookieHeader) => setCookieHeader.split(';')[0];
+
+    it('returns a new access token and rotates the refresh cookie', async () => {
+        const signupResponse = await signupAndActivate();
+        const refreshCookie = cookieValue(cookieHeader(signupResponse));
+
+        const response = await request(app)
+            .post('/users/refresh')
+            .set('Cookie', refreshCookie);
+
+        expect(response.status).toBe(200);
+        expect(typeof response.body.accessToken).toBe('string');
+        expect(response.body.accessToken.length).toBeGreaterThan(0);
+        // The rotated refresh token is a fresh random value even when the
+        // JWT access token happens to be byte-identical (same sub/iat/exp
+        // within the same second is expected, not a bug).
+        expect(cookieValue(cookieHeader(response))).not.toBe(refreshCookie);
+    });
+
+    it('rejects a missing cookie', async () => {
+        const response = await request(app).post('/users/refresh');
+
+        expect(response.status).toBe(401);
+    });
+
+    it('rejects an unknown cookie value', async () => {
+        const response = await request(app)
+            .post('/users/refresh')
+            .set('Cookie', 'refreshToken=not-a-real-token');
+
+        expect(response.status).toBe(401);
+    });
+
+    it('rejects an expired refresh token', async () => {
+        const signupResponse = await signupAndActivate();
+        await User.findByIdAndUpdate(signupResponse.body._id, {
+            refreshTokenExpiresAt: new Date(Date.now() - 1000),
+        });
+        const refreshCookie = cookieValue(cookieHeader(signupResponse));
+
+        const response = await request(app)
+            .post('/users/refresh')
+            .set('Cookie', refreshCookie);
+
+        expect(response.status).toBe(401);
+    });
+
+    it('rejects a rotated-out refresh token on reuse', async () => {
+        const signupResponse = await signupAndActivate();
+        const firstCookie = cookieValue(cookieHeader(signupResponse));
+
+        await request(app).post('/users/refresh').set('Cookie', firstCookie);
+
+        const reuse = await request(app)
+            .post('/users/refresh')
+            .set('Cookie', firstCookie);
+
+        expect(reuse.status).toBe(401);
+    });
+});
+
+describe('POST /users/logout', () => {
+    it('clears the cookie and invalidates the refresh token', async () => {
+        const signupResponse = await request(app).post('/users/signup').send({
+            email: 'jane@example.com',
+            password: 'secret123',
+            username: 'jane',
+        });
+        await activateUser('jane@example.com');
+        const refreshCookie =
+            signupResponse.headers['set-cookie'][0].split(';')[0];
+
+        const logoutResponse = await request(app)
+            .post('/users/logout')
+            .set('Cookie', refreshCookie);
+
+        expect(logoutResponse.status).toBe(200);
+
+        const refreshAfterLogout = await request(app)
+            .post('/users/refresh')
+            .set('Cookie', refreshCookie);
+
+        expect(refreshAfterLogout.status).toBe(401);
+    });
+
+    it('succeeds even with no cookie at all', async () => {
+        const response = await request(app).post('/users/logout');
+
+        expect(response.status).toBe(200);
     });
 });
 
@@ -695,7 +840,7 @@ describe('PATCH /users/:id', () => {
             username: 'jane',
         });
         userId = signupResponse.body._id;
-        token = signupResponse.body.token;
+        token = signupResponse.body.accessToken;
         await activateUser('jane@example.com');
     });
 
@@ -736,7 +881,7 @@ describe('DELETE /users/:id', () => {
             username: 'jane',
         });
         userId = signupResponse.body._id;
-        token = signupResponse.body.token;
+        token = signupResponse.body.accessToken;
         await activateUser('jane@example.com');
     });
 
@@ -778,7 +923,7 @@ describe('DELETE /users/:id', () => {
         });
         await activateUser('other@example.com');
         const otherId = otherSignup.body._id;
-        const otherToken = otherSignup.body.token;
+        const otherToken = otherSignup.body.accessToken;
 
         const publishResponse = await request(app)
             .post('/offers/publish')
@@ -824,7 +969,7 @@ describe('favorites', () => {
             username: 'jane',
         });
         userId = signupResponse.body._id;
-        token = signupResponse.body.token;
+        token = signupResponse.body.accessToken;
         await activateUser('jane@example.com');
 
         const otherSignup = await request(app).post('/users/signup').send({
@@ -833,7 +978,7 @@ describe('favorites', () => {
             username: 'other',
         });
         otherId = otherSignup.body._id;
-        otherToken = otherSignup.body.token;
+        otherToken = otherSignup.body.accessToken;
         await activateUser('other@example.com');
 
         const publishResponse = await request(app)

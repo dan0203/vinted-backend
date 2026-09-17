@@ -11,8 +11,9 @@ const options = {
                 bearerAuth: {
                     type: 'http',
                     scheme: 'bearer',
+                    bearerFormat: 'JWT',
                     description:
-                        'Opaque token returned by signup/login, sent as `Authorization: Bearer <token>`.',
+                        'Short-lived JWT access token returned by signup/login/refresh, sent as `Authorization: Bearer <accessToken>`. Renew it with `POST /users/refresh` once it expires.',
                 },
             },
             schemas: {

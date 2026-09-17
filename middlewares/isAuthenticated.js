@@ -1,5 +1,5 @@
+const jwt = require('jsonwebtoken');
 const User = require('../models/User');
-const { MAX_TOKEN_AGE_MS } = require('../utils/constants');
 
 const isAuthenticated = async (req, res, next) => {
     try {
@@ -8,18 +8,21 @@ const isAuthenticated = async (req, res, next) => {
         }
 
         const token = req.headers.authorization.replace('Bearer ', '');
-        // _id is included even though it's not in select(): Mongoose always
-        // returns it unless explicitly excluded (-_id).
-        const user = await User.findOne({ token }).select(
-            'email account tokenIssuedAt active'
-        );
 
-        if (!user) {
+        let payload;
+        try {
+            payload = jwt.verify(token, process.env.JWT_SECRET);
+        } catch {
             return res.status(401).json({ message: 'Unauthorized' });
         }
 
-        const tokenAge = Date.now() - user.tokenIssuedAt.getTime();
-        if (tokenAge > MAX_TOKEN_AGE_MS) {
+        // _id is included even though it's not in select(): Mongoose always
+        // returns it unless explicitly excluded (-_id).
+        const user = await User.findById(payload.sub).select(
+            'email account active'
+        );
+
+        if (!user) {
             return res.status(401).json({ message: 'Unauthorized' });
         }
 

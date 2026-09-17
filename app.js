@@ -1,6 +1,7 @@
 const express = require('express');
 const cors = require('cors');
 const helmet = require('helmet');
+const cookieParser = require('cookie-parser');
 const swaggerUi = require('swagger-ui-express');
 const sanitizeMongo = require('./middlewares/sanitizeMongo');
 const cloudinary = require('cloudinary').v2;
@@ -17,8 +18,9 @@ cloudinary.config({
 const app = express();
 app.use(helmet());
 app.disable('x-powered-by');
-app.use(cors({ origin: process.env.FRONTEND_URL }));
+app.use(cors({ origin: process.env.FRONTEND_URL, credentials: true }));
 app.use(express.json({ limit: '10kb' }));
+app.use(cookieParser());
 app.use(sanitizeMongo);
 
 app.use('/users', userRoutes);

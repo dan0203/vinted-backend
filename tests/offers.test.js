@@ -85,7 +85,7 @@ beforeEach(async () => {
         password: 'secret123',
         username: 'seller',
     });
-    token = signupResponse.body.token;
+    token = signupResponse.body.accessToken;
     await activateUser('seller@example.com');
 });
 
@@ -370,7 +370,7 @@ const testsCommonToUpdateMethods = (method, getOfferId, attachFields) => {
         const response = await attachFields(
             request(app)
                 [method](`/offers/${getOfferId()}`)
-                .set('Authorization', `Bearer ${otherSignup.body.token}`)
+                .set('Authorization', `Bearer ${otherSignup.body.accessToken}`)
         );
 
         expect(response.status).toBe(404);
@@ -771,7 +771,7 @@ describe('DELETE /offers/:id', () => {
 
         const response = await request(app)
             .delete(`/offers/${offerId}`)
-            .set('Authorization', `Bearer ${otherSignup.body.token}`);
+            .set('Authorization', `Bearer ${otherSignup.body.accessToken}`);
 
         expect(response.status).toBe(404);
     });

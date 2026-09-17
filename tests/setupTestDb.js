@@ -2,6 +2,12 @@ const { MongoMemoryServer } = require('mongodb-memory-server');
 const mongoose = require('mongoose');
 const User = require('../models/User');
 
+// No .env is loaded in the test environment (index.js is the only entry
+// point that calls dotenv.config()), so isAuthenticated/user.service need a
+// signing secret from somewhere - a fixed test-only value here, never a
+// fallback in the source itself.
+process.env.JWT_SECRET = process.env.JWT_SECRET || 'test-jwt-secret';
+
 let mongoServer;
 
 // Starts a real, ephemeral, in-memory MongoDB instance dedicated to the tests

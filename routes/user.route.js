@@ -33,14 +33,14 @@ const upload = fileUpload({
  *               newsletter: { type: boolean }
  *     responses:
  *       201:
- *         description: Account created
+ *         description: Account created. Also sets a `refreshToken` httpOnly cookie.
  *         content:
  *           application/json:
  *             schema:
  *               type: object
  *               properties:
  *                 _id: { type: string }
- *                 token: { type: string }
+ *                 accessToken: { type: string, description: 'Short-lived JWT, expires in 15 minutes' }
  *                 account:
  *                   type: object
  *                   properties:
@@ -76,14 +76,14 @@ router.post('/signup', authLimiter, userController.signup);
  *               password: { type: string, minLength: 6 }
  *     responses:
  *       200:
- *         description: Logged in
+ *         description: Logged in. Also sets a `refreshToken` httpOnly cookie.
  *         content:
  *           application/json:
  *             schema:
  *               type: object
  *               properties:
  *                 _id: { type: string }
- *                 token: { type: string }
+ *                 accessToken: { type: string, description: 'Short-lived JWT, expires in 15 minutes' }
  *                 account:
  *                   type: object
  *                   properties:
@@ -105,6 +105,49 @@ router.post('/signup', authLimiter, userController.signup);
  *             schema: { $ref: '#/components/schemas/Error' }
  */
 router.post('/login', authLimiter, userController.login);
+
+/**
+ * @openapi
+ * /users/refresh:
+ *   post:
+ *     summary: Get a new access token from the refresh cookie
+ *     description: Reads the `refreshToken` httpOnly cookie set by signup/login/refresh, rotates it, and issues a new short-lived access token. There is no request body - the refresh token travels only as a cookie, never in JSON.
+ *     tags: [Users]
+ *     responses:
+ *       200:
+ *         description: New access token issued. Also rotates the `refreshToken` cookie.
+ *         content:
+ *           application/json:
+ *             schema:
+ *               type: object
+ *               properties:
+ *                 accessToken: { type: string }
+ *       401:
+ *         description: Missing, unknown, expired, or already-rotated-out refresh cookie
+ *         content:
+ *           application/json:
+ *             schema: { $ref: '#/components/schemas/Error' }
+ */
+router.post('/refresh', authLimiter, userController.refresh);
+
+/**
+ * @openapi
+ * /users/logout:
+ *   post:
+ *     summary: End the current session
+ *     description: Clears the `refreshToken` cookie and, if it matched a live session, invalidates it server-side. Always responds 200, even with no cookie at all.
+ *     tags: [Users]
+ *     responses:
+ *       200:
+ *         description: Logged out
+ *         content:
+ *           application/json:
+ *             schema:
+ *               type: object
+ *               properties:
+ *                 message: { type: string }
+ */
+router.post('/logout', authLimiter, userController.logout);
 
 /**
  * @openapi

@@ -1,10 +1,39 @@
 const userService = require('../services/user.service');
+const { REFRESH_TOKEN_TTL_MS } = require('../utils/constants');
+
+const REFRESH_COOKIE_NAME = 'refreshToken';
+
+// Shared by every route that sets/clears the refresh cookie, so the
+// httpOnly/sameSite/secure/path attributes can never drift between them -
+// clearCookie() must be called with the same attributes used to set it.
+const refreshCookieOptions = () => ({
+    httpOnly: true,
+    sameSite: 'lax',
+    secure: process.env.NODE_ENV === 'production',
+    path: '/users',
+});
+
+const setRefreshCookie = (res, refreshToken) => {
+    res.cookie(REFRESH_COOKIE_NAME, refreshToken, {
+        ...refreshCookieOptions(),
+        maxAge: REFRESH_TOKEN_TTL_MS,
+    });
+};
+
+// Strips the server-only refreshToken/refreshTokenExpiresAt fields before a
+// signup/login/refresh result reaches the JSON response body.
+const toAuthResponse = ({
+    refreshToken: _refreshToken,
+    refreshTokenExpiresAt: _refreshTokenExpiresAt,
+    ...rest
+}) => rest;
 
 const signup = async (req, res, next) => {
     try {
         const newUser = await userService.signup(req.body);
+        setRefreshCookie(res, newUser.refreshToken);
 
-        return res.status(201).json(newUser);
+        return res.status(201).json(toAuthResponse(newUser));
     } catch (error) {
         next(error);
     }
@@ -13,8 +42,31 @@ const signup = async (req, res, next) => {
 const login = async (req, res, next) => {
     try {
         const user = await userService.login(req.body);
+        setRefreshCookie(res, user.refreshToken);
 
-        return res.status(200).json(user);
+        return res.status(200).json(toAuthResponse(user));
+    } catch (error) {
+        next(error);
+    }
+};
+
+const refresh = async (req, res, next) => {
+    try {
+        const result = await userService.refresh({ cookies: req.cookies });
+        setRefreshCookie(res, result.refreshToken);
+
+        return res.status(200).json(toAuthResponse(result));
+    } catch (error) {
+        next(error);
+    }
+};
+
+const logout = async (req, res, next) => {
+    try {
+        const result = await userService.logout({ cookies: req.cookies });
+        res.clearCookie(REFRESH_COOKIE_NAME, refreshCookieOptions());
+
+        return res.status(200).json(result);
     } catch (error) {
         next(error);
     }
@@ -145,6 +197,8 @@ const getFavorites = async (req, res, next) => {
 module.exports = {
     signup,
     login,
+    refresh,
+    logout,
     confirmEmail,
     resendConfirmation,
     requestPasswordReset,

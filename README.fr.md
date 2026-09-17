@@ -31,7 +31,7 @@ Aucune démo n'est actuellement déployée ; voir [Démarrage](#démarrage) pour
 
 ## Fonctionnalités
 
-- **Authentification** : inscription et connexion avec mot de passe hashé (bcrypt) et token Bearer délivré à la connexion.
+- **Authentification** : inscription et connexion avec mot de passe hashé (bcrypt) ; un token d'accès JWT de courte durée est renvoyé dans le corps de la réponse et un refresh token tournant est délivré dans un cookie `httpOnly`.
 - **Autorisation** : seul le propriétaire d'une annonce, ou le compte lui-même, peut la modifier ou la supprimer.
 - **Annonces** : publication, remplacement complet (PUT) ou modification partielle (PATCH), et suppression d'une annonce, avec une photo principale et jusqu'à 5 photos secondaires hébergées sur Cloudinary.
 - **Comptes** : modifier son propre username/avatar/newsletter (PUT/PATCH) ou supprimer son propre compte (DELETE), ce qui supprime aussi toutes ses annonces.
@@ -40,15 +40,15 @@ Aucune démo n'est actuellement déployée ; voir [Démarrage](#démarrage) pour
 
 ## Stack technique
 
-| Catégorie             | Choix                                                                                                                                                                                                          |
-| --------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| Runtime / framework   | Node.js, Express 5 (routing, middlewares)                                                                                                                                                                      |
-| Base de données / ODM | MongoDB, Mongoose                                                                                                                                                                                              |
-| Validation            | [Joi](https://joi.dev/) (validation par schéma, toutes les routes)                                                                                                                                             |
-| Authentification      | Auth par token Bearer maison, [bcryptjs](https://github.com/dcodeIO/bcrypt.js) pour le hachage des mots de passe, `uid2` pour la génération de token/sel                                                       |
-| Upload de fichiers    | [express-fileupload](https://github.com/richardgirges/express-fileupload) + [Cloudinary](https://cloudinary.com/) pour l'hébergement d'images                                                                  |
-| Documentation API     | [swagger-jsdoc](https://github.com/Surnet/swagger-jsdoc) + [swagger-ui-express](https://github.com/scottie1984/swagger-ui-express) (OpenAPI 3.0, générée depuis les commentaires JSDoc des fichiers de routes) |
-| Outillage             | ESLint + Prettier, CI GitHub Actions (lint à chaque push/PR)                                                                                                                                                   |
+| Catégorie             | Choix                                                                                                                                                                                                                                                                       |
+| --------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Runtime / framework   | Node.js, Express 5 (routing, middlewares)                                                                                                                                                                                                                                   |
+| Base de données / ODM | MongoDB, Mongoose                                                                                                                                                                                                                                                           |
+| Validation            | [Joi](https://joi.dev/) (validation par schéma, toutes les routes)                                                                                                                                                                                                          |
+| Authentification      | Tokens d'accès JWT (`jsonwebtoken`) + refresh token tournant dans un cookie `httpOnly` (`cookie-parser`), [bcryptjs](https://github.com/dcodeIO/bcrypt.js) pour le hachage des mots de passe, `uid2` pour la génération des tokens de refresh/confirmation/réinitialisation |
+| Upload de fichiers    | [express-fileupload](https://github.com/richardgirges/express-fileupload) + [Cloudinary](https://cloudinary.com/) pour l'hébergement d'images                                                                                                                               |
+| Documentation API     | [swagger-jsdoc](https://github.com/Surnet/swagger-jsdoc) + [swagger-ui-express](https://github.com/scottie1984/swagger-ui-express) (OpenAPI 3.0, générée depuis les commentaires JSDoc des fichiers de routes)                                                              |
+| Outillage             | ESLint + Prettier, CI GitHub Actions (lint à chaque push/PR)                                                                                                                                                                                                                |
 
 _(Les paquets utilitaires comme `cors` et `dotenv` servent à la configuration standard et ne sont pas listés comme des choix d'architecture.)_
 
@@ -56,7 +56,7 @@ _(Les paquets utilitaires comme `cors` et `dotenv` servent à la configuration s
 
 URL de base : `http://localhost:3000` (ou le `PORT` configuré). Tous les corps de requête/réponse sont en JSON, sauf `publish`/`PUT`/`PATCH` qui attendent du `multipart/form-data` (nécessaire pour l'upload de fichiers, même sur les requêtes qui n'envoient que des champs texte).
 
-Les routes authentifiées attendent un header `Authorization: Bearer <token>`, avec le token renvoyé par l'inscription/connexion.
+Les routes authentifiées attendent un header `Authorization: Bearer <accessToken>`, avec le token d'accès renvoyé par l'inscription/connexion/refresh. Ce token est de courte durée (15 minutes) ; une fois expiré, appelle `POST /users/refresh` (pas de corps - il lit le cookie `httpOnly` `refreshToken` posé par l'inscription/connexion/refresh) pour en obtenir un nouveau sans redemander de reconnexion.
 
 Une documentation interactive et explorable, générée à partir de ces mêmes routes, est servie à `/api-docs/` (document OpenAPI brut à `/api-docs.json`) - une requête vers `/api-docs` sans le slash final redirige vers cette adresse.
 
@@ -64,6 +64,8 @@ Une documentation interactive et explorable, générée à partir de ces mêmes 
 | ------- | ----------------- | ---------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
 | POST    | `/users/signup`   | —                            | Créer un compte. Corps : `email`, `password` (6 caractères min.), `username`, `newsletter` (optionnel).                                                                                                     |
 | POST    | `/users/login`    | —                            | Se connecter. Corps : `email`, `password`.                                                                                                                                                                  |
+| POST    | `/users/refresh`  | —                            | Pas de corps - lit le cookie `refreshToken`. Le fait tourner et renvoie un nouveau `accessToken`. `401` si le cookie est absent, inconnu, expiré, ou déjà remplacé par rotation.                            |
+| POST    | `/users/logout`   | —                            | Pas de corps - lit le cookie `refreshToken` s'il existe et l'invalide, puis efface le cookie. Répond toujours `200`, même sans aucun cookie.                                                                |
 | GET     | `/users/:id`      | —                            | Récupérer le profil public d'un utilisateur (`_id`, `account.username`, `account.avatar`, `newsletter`).                                                                                                    |
 | PUT     | `/users/:id`      | ✅ (soi-même uniquement)     | Remplacer son profil. `multipart/form-data` : `username` (requis), `avatar` (fichier, optionnel) et `newsletter` optionnels — omettre `avatar` le laisse inchangé, il n'est jamais vidé implicitement.      |
 | PATCH   | `/users/:id`      | ✅ (soi-même uniquement)     | Modifier partiellement son profil — n'envoyer que `username`, `avatar` et/ou `newsletter`.                                                                                                                  |
@@ -80,24 +82,35 @@ Une documentation interactive et explorable, générée à partir de ces mêmes 
 Inscription :
 
 ```bash
-curl -X POST http://localhost:3000/users/signup \
+curl -i -X POST http://localhost:3000/users/signup \
   -H "Content-Type: application/json" \
   -d '{"email":"jane@example.com","password":"secret123","username":"jane"}'
+```
+
+```
+Set-Cookie: refreshToken=h8g7f6e5d4c3b2a1...; Path=/users; HttpOnly; SameSite=Lax
 ```
 
 ```json
 {
     "_id": "66f1a2b3c4d5e6f7a8b9c0d1",
-    "token": "aB3dE5fG7hJ9kL1mN2pQrStUvW",
+    "accessToken": "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9...",
     "account": { "username": "jane" }
 }
+```
+
+Obtenir un nouveau token d'accès une fois expiré (pas de corps - le refresh token ne circule que dans le cookie posé ci-dessus) :
+
+```bash
+curl -X POST http://localhost:3000/users/refresh \
+  -H "Cookie: refreshToken=h8g7f6e5d4c3b2a1..."
 ```
 
 Publier une annonce (propriétaire uniquement, `multipart/form-data` ; `pictures` peut être répété jusqu'à 5 fois pour les images secondaires) :
 
 ```bash
 curl -X POST http://localhost:3000/offers/publish \
-  -H "Authorization: Bearer aB3dE5fG7hJ9kL1mN2pQrStUvW" \
+  -H "Authorization: Bearer eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9..." \
   -F "title=Veste en jean vintage" \
   -F "description=Bon état, portée quelques fois" \
   -F "price=25" \
@@ -178,6 +191,7 @@ Le serveur se connecte à MongoDB et à Cloudinary au démarrage, et refuse de d
 | `CLOUDINARY_CLOUD_NAME` | Depuis ton tableau de bord Cloudinary.                                                                                                                                                                       |
 | `CLOUDINARY_API_KEY`    | Depuis ton tableau de bord Cloudinary.                                                                                                                                                                       |
 | `CLOUDINARY_API_SECRET` | Depuis ton tableau de bord Cloudinary — à garder secret, ne jamais committer.                                                                                                                                |
+| `JWT_SECRET`            | Secret utilisé pour signer/vérifier les tokens d'accès — à garder secret, ne jamais committer.                                                                                                               |
 | `PORT`                  | Optionnel, `3000` par défaut.                                                                                                                                                                                |
 
 `.env` est ignoré par Git ; `.env.example` documente les noms de variables attendus. Si tu déploies un jour cette API (Render, Railway, etc.), renseigne ces mêmes variables dans les réglages d'environnement/secrets de cette plateforme — rien de spécifique à préfixer ici, puisque c'est un backend Node/Express classique utilisant `dotenv` (contrairement à un frontend Vite ou Create React App, où une variable doit être préfixée `VITE_`/`REACT_APP_` pour être exposée au navigateur).
@@ -185,7 +199,7 @@ Le serveur se connecte à MongoDB et à Cloudinary au démarrage, et refuse de d
 ## Sécurité
 
 - Les mots de passe sont hashés avec **bcrypt** (10 tours de salage) — jamais stockés ni renvoyés en clair.
-- L'authentification repose sur un token opaque aléatoire (`uid2`), vérifié en base à chaque requête vers une route protégée, via le middleware `isAuthenticated`.
+- L'authentification repose sur un token d'accès JWT de courte durée (15 minutes), vérifié à chaque requête vers une route protégée via le middleware `isAuthenticated`, plus un refresh token tournant délivré uniquement dans un cookie `httpOnly` (jamais dans un corps JSON) - chaque `POST /users/refresh` le remplace, donc un refresh token émis précédemment cesse immédiatement de fonctionner dès qu'un nouveau est émis.
 - La propriété est vérifiée côté serveur, de façon atomique avec l'écriture elle-même (un seul `findOneAndUpdate`/`findOneAndDelete` filtré par `{ _id, owner }`) : une annonce qui existe mais appartient à quelqu'un d'autre renvoie `404`, comme une annonce inexistante, pour qu'un non-propriétaire ne puisse pas distinguer les deux cas. Les routes de compte (`PUT`/`PATCH`/`DELETE /users/:id`) renvoient `403` à la place pour le même cas — `GET /users/:id` étant déjà public, cacher l'existence d'un compte n'apporterait rien ici.
 - Joi valide et nettoie les entrées de toutes les routes avant qu'elles n'atteignent la base de données.
 - L'endpoint de recherche par titre échappe les caractères spéciaux de regex avant de construire le pattern de recherche, fermant un vecteur de ReDoS (une chaîne fournie par l'utilisateur, utilisée telle quelle comme source de regex, peut déclencher un backtracking catastrophique).

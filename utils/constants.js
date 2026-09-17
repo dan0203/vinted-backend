@@ -7,7 +7,8 @@ const MAX_PICTURES = 5;
 const FIELD_SORT_OPTIONS = ['price-asc', 'price-desc'];
 const OFFER = 'offer';
 const USER = 'user';
-const MAX_TOKEN_AGE_MS = 30 * 24 * 60 * 60 * 1000;
+const ACCESS_TOKEN_TTL = '15m';
+const REFRESH_TOKEN_TTL_MS = 30 * 24 * 60 * 60 * 1000;
 const MAX_LOGIN_ATTEMPTS = 5;
 const ACCOUNT_LOCK_MS = 15 * 60 * 1000;
 const CONFIRMATION_TOKEN_TTL_MS = 24 * 60 * 60 * 1000;
@@ -23,7 +24,8 @@ module.exports = {
     FIELD_SORT_OPTIONS,
     OFFER,
     USER,
-    MAX_TOKEN_AGE_MS,
+    ACCESS_TOKEN_TTL,
+    REFRESH_TOKEN_TTL_MS,
     MAX_LOGIN_ATTEMPTS,
     ACCOUNT_LOCK_MS,
     CONFIRMATION_TOKEN_TTL_MS,

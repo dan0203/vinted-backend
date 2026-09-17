@@ -1,6 +1,7 @@
 const Joi = require('joi');
 const bcrypt = require('bcryptjs');
 const uid2 = require('uid2');
+const jwt = require('jsonwebtoken');
 const User = require('../models/User');
 const Offer = require('../models/Offer');
 const offerService = require('./offer.service');
@@ -25,6 +26,8 @@ const {
 const {
     USER,
     OFFER,
+    ACCESS_TOKEN_TTL,
+    REFRESH_TOKEN_TTL_MS,
     MAX_LOGIN_ATTEMPTS,
     ACCOUNT_LOCK_MS,
     CONFIRMATION_TOKEN_TTL_MS,
@@ -65,6 +68,19 @@ function issueConfirmationToken(user) {
     user.confirmationTokenExpiresAt = new Date(
         Date.now() + CONFIRMATION_TOKEN_TTL_MS
     );
+}
+
+// Mints a short-lived JWT access token and a rotating refresh token, storing
+// the refresh token on the user document (caller still has to save() it) and
+// returning the access token. One active refresh token per user at a time,
+// same shape the previous opaque bearer token had - not a per-device list.
+function issueSessionTokens(user) {
+    user.refreshToken = uid2(16);
+    user.refreshTokenExpiresAt = new Date(Date.now() + REFRESH_TOKEN_TTL_MS);
+
+    return jwt.sign({ sub: String(user._id) }, process.env.JWT_SECRET, {
+        expiresIn: ACCESS_TOKEN_TTL,
+    });
 }
 
 // username/newsletter only: email and password aren't modified through
@@ -137,7 +153,6 @@ const signup = async (data) => {
     }
 
     const hash = await bcrypt.hash(data.password, 10);
-    const token = uid2(16);
 
     const newUser = new User({
         email: data.email,
@@ -146,8 +161,8 @@ const signup = async (data) => {
         },
         newsletter: data.newsletter,
         hash,
-        token,
     });
+    const accessToken = issueSessionTokens(newUser);
     issueConfirmationToken(newUser);
 
     await newUser.save();
@@ -158,7 +173,9 @@ const signup = async (data) => {
 
     return {
         _id: newUser._id,
-        token: newUser.token,
+        accessToken,
+        refreshToken: newUser.refreshToken,
+        refreshTokenExpiresAt: newUser.refreshTokenExpiresAt,
         account: {
             username: newUser.account.username,
         },
@@ -197,17 +214,61 @@ const login = async (data) => {
 
     user.failedLoginAttempts = 0;
     user.lockUntil = null;
-    user.token = uid2(16);
-    user.tokenIssuedAt = new Date();
+    const accessToken = issueSessionTokens(user);
     await user.save();
 
     return {
         _id: user._id,
-        token: user.token,
+        accessToken,
+        refreshToken: user.refreshToken,
+        refreshTokenExpiresAt: user.refreshTokenExpiresAt,
         account: {
             username: user.account.username,
         },
     };
+};
+
+// Rotates the refresh token on every use: the presented value is replaced
+// immediately, so presenting it again afterward is indistinguishable from
+// any other unrecognized refresh token (401), which is this codebase's
+// existing single-active-session model, not a per-device session list.
+const refresh = async (data) => {
+    const token = data.cookies?.refreshToken;
+    if (!token) {
+        throwError('Unauthorized', 401);
+    }
+
+    const user = await User.findOne({
+        refreshToken: token,
+        refreshTokenExpiresAt: { $gt: new Date() },
+    });
+    if (!user) {
+        throwError('Unauthorized', 401);
+    }
+
+    const accessToken = issueSessionTokens(user);
+    await user.save();
+
+    return {
+        accessToken,
+        refreshToken: user.refreshToken,
+        refreshTokenExpiresAt: user.refreshTokenExpiresAt,
+    };
+};
+
+// Best effort: an unknown/already-invalid cookie value is not an error, and
+// logging out with no cookie at all still succeeds - the caller's goal (no
+// live session) is already satisfied either way.
+const logout = async (data) => {
+    const token = data.cookies?.refreshToken;
+    if (token) {
+        await User.updateOne(
+            { refreshToken: token },
+            { refreshToken: null, refreshTokenExpiresAt: null }
+        );
+    }
+
+    return { message: 'Logged out' };
 };
 
 const confirmEmail = async (data) => {
@@ -278,9 +339,10 @@ const requestPasswordReset = async (data) => {
 // attempt doesn't pay for a bcrypt round it can't use. The final write still
 // filters on the token itself (not just _id), so a second request racing on
 // the same now-consumed token still gets the same 400 instead of a second
-// successful reset. Rotating the session token invalidates any bearer token
-// issued before the reset, and clearing the lockout fields means a
-// legitimate reset isn't blocked by a stale failed-login lock.
+// successful reset. Clearing the refresh token invalidates any session
+// started before the reset (a still-live access token simply expires within
+// ACCESS_TOKEN_TTL), and clearing the lockout fields means a legitimate
+// reset isn't blocked by a stale failed-login lock.
 const confirmPasswordReset = async (data) => {
     data = assertValid(confirmPasswordResetSchema, data);
 
@@ -301,8 +363,8 @@ const confirmPasswordReset = async (data) => {
             hash,
             resetToken: null,
             resetTokenExpiresAt: null,
-            token: uid2(16),
-            tokenIssuedAt: new Date(),
+            refreshToken: null,
+            refreshTokenExpiresAt: null,
             failedLoginAttempts: 0,
             lockUntil: null,
         },
@@ -475,6 +537,8 @@ const getFavorites = async (data) => {
 module.exports = {
     signup,
     login,
+    refresh,
+    logout,
     confirmEmail,
     resendConfirmation,
     requestPasswordReset,
