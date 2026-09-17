@@ -307,6 +307,76 @@ describe('GET /offers', () => {
         expect(response.body.totalPages).toBe(0);
     });
 
+    it('rejects priceMin greater than priceMax', async () => {
+        const response = await request(app).get(
+            '/offers?priceMin=200&priceMax=100'
+        );
+
+        expect(response.status).toBe(400);
+        expect(response.body.message).toMatch(/priceMin/);
+    });
+
+    it('filters by title, case-insensitively', async () => {
+        const response = await request(app).get('/offers?title=JACKET');
+
+        expect(response.status).toBe(200);
+        expect(response.body.count).toBe(1);
+    });
+
+    it('escapes regex special characters in the title filter instead of erroring', async () => {
+        const response = await request(app).get(
+            '/offers?title=' + encodeURIComponent('jacket(')
+        );
+
+        expect(response.status).toBe(200);
+        expect(response.body.count).toBe(0);
+    });
+
+    it('filters by priceMin alone', async () => {
+        const response = await request(app).get('/offers?priceMin=100');
+
+        expect(response.status).toBe(200);
+        expect(response.body.count).toBe(0);
+    });
+
+    it('filters by priceMax alone', async () => {
+        const response = await request(app).get('/offers?priceMax=10');
+
+        expect(response.status).toBe(200);
+        expect(response.body.count).toBe(0);
+    });
+
+    it('sorts by price descending when requested', async () => {
+        await attachPicture(
+            request(app)
+                .post('/offers/publish')
+                .set('Authorization', `Bearer ${token}`)
+                .field('title', 'Pricier jacket')
+                .field('description', 'Good condition')
+                .field('price', '99')
+                .field('brand', "Levi's")
+                .field('size', 'M')
+                .field('color', 'Blue')
+                .field('condition', 'Good')
+                .field('city', 'Paris')
+        );
+
+        const response = await request(app).get('/offers?sort=price-desc');
+
+        expect(response.status).toBe(200);
+        expect(response.body.offers.map((offer) => offer.price)).toEqual([
+            99, 25,
+        ]);
+    });
+
+    it('returns an explicitly requested page beyond the results as empty', async () => {
+        const response = await request(app).get('/offers?page=2');
+
+        expect(response.status).toBe(200);
+        expect(response.body.page).toBe(2);
+        expect(response.body.offers).toHaveLength(0);
+    });
+
     it('excludes sold offers by default, but still returns them by id', async () => {
         const listResponse = await request(app).get('/offers');
         const offerId = listResponse.body.offers[0]._id;
@@ -472,6 +542,47 @@ describe('PUT /offers/:id', () => {
         expect(details.city).toBe('Lyon');
     });
 
+    it('removes the old main image and old secondary pictures once the replace succeeds', async () => {
+        const withPictures = await attachPictures(
+            attachPicture(
+                request(app)
+                    .post('/offers/publish')
+                    .set('Authorization', `Bearer ${token}`)
+                    .field('title', 'Another jacket')
+                    .field('description', 'Good condition')
+                    .field('price', '25')
+                    .field('brand', "Levi's")
+                    .field('size', 'M')
+                    .field('color', 'Blue')
+                    .field('condition', 'Good')
+                    .field('city', 'Paris')
+            ),
+            2
+        );
+        const idWithPictures = withPictures.body._id;
+        const removeImageCallsBefore = cloudinary.removeImage.mock.calls.length;
+
+        const response = await attachPicture(
+            request(app)
+                .put(`/offers/${idWithPictures}`)
+                .set('Authorization', `Bearer ${token}`)
+                .field('title', 'Updated jacket')
+                .field('description', 'Updated description')
+                .field('price', '40')
+                .field('brand', 'Nike')
+                .field('size', 'L')
+                .field('color', 'Black')
+                .field('condition', 'New')
+                .field('city', 'Lyon')
+        );
+
+        expect(response.status).toBe(200);
+        // 1 old main image + 2 old secondary pictures
+        expect(cloudinary.removeImage.mock.calls.length).toBe(
+            removeImageCallsBefore + 3
+        );
+    });
+
     it('attempts no cleanup when the new main image upload itself fails', async () => {
         cloudinary.uploadImage.mockRejectedValueOnce(
             new Error('upload failed')
@@ -599,6 +710,17 @@ describe('PATCH /offers/:id', () => {
         expect(response.body.name).toBe('Vintage jacket');
     });
 
+    it('updates the title alone', async () => {
+        const response = await request(app)
+            .patch(`/offers/${offerId}`)
+            .set('Authorization', `Bearer ${token}`)
+            .field('title', 'Renamed jacket');
+
+        expect(response.status).toBe(200);
+        expect(response.body.name).toBe('Renamed jacket');
+        expect(response.body.price).toBe(25);
+    });
+
     it('updates the status to a valid value', async () => {
         const response = await request(app)
             .patch(`/offers/${offerId}`)
@@ -616,6 +738,27 @@ describe('PATCH /offers/:id', () => {
             .field('status', 'not-a-status');
 
         expect(response.status).toBe(400);
+    });
+
+    it('rejects a PATCH with neither fields nor files', async () => {
+        const response = await request(app)
+            .patch(`/offers/${offerId}`)
+            .set('Authorization', `Bearer ${token}`)
+            .set('Content-Type', 'multipart/form-data; boundary=none');
+
+        expect(response.status).toBe(400);
+        expect(response.body.message).toBe('No data was sent');
+    });
+
+    it('updates the description field alone', async () => {
+        const response = await request(app)
+            .patch(`/offers/${offerId}`)
+            .set('Authorization', `Bearer ${token}`)
+            .field('description', 'Brand new description');
+
+        expect(response.status).toBe(200);
+        expect(response.body.description).toBe('Brand new description');
+        expect(response.body.name).toBe('Vintage jacket');
     });
 
     it('merges a single details field instead of replacing the whole object', async () => {
@@ -653,6 +796,21 @@ describe('PATCH /offers/:id', () => {
         );
         expect(secondResponse.status).toBe(200);
         expect(secondResponse.body.pictures).toHaveLength(1);
+    });
+
+    it('removes the old main image once a new "picture" is applied', async () => {
+        const removeImageCallsBefore = cloudinary.removeImage.mock.calls.length;
+
+        const response = await attachPicture(
+            request(app)
+                .patch(`/offers/${offerId}`)
+                .set('Authorization', `Bearer ${token}`)
+        );
+
+        expect(response.status).toBe(200);
+        expect(cloudinary.removeImage.mock.calls.length).toBe(
+            removeImageCallsBefore + 1
+        );
     });
 
     it('leaves pictures untouched when "pictures" is not sent', async () => {
