@@ -40,14 +40,15 @@ No demo is currently deployed; see [Getting started](#getting-started) to run it
 
 ## Tech stack
 
-| Category            | Choice                                                                                                                              |
-| ------------------- | ----------------------------------------------------------------------------------------------------------------------------------- |
-| Runtime / framework | Node.js, Express 5 (routing, middleware)                                                                                            |
-| Database / ODM      | MongoDB, Mongoose                                                                                                                   |
-| Validation          | [Joi](https://joi.dev/) (schema validation, all routes)                                                                             |
-| Auth                | Custom Bearer-token auth, [bcryptjs](https://github.com/dcodeIO/bcrypt.js) for password hashing, `uid2` for token/salt generation   |
-| File upload         | [express-fileupload](https://github.com/richardgirges/express-fileupload) + [Cloudinary](https://cloudinary.com/) for image hosting |
-| Tooling             | ESLint + Prettier, GitHub Actions CI (lint on every push/PR)                                                                        |
+| Category            | Choice                                                                                                                                                                                             |
+| ------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Runtime / framework | Node.js, Express 5 (routing, middleware)                                                                                                                                                           |
+| Database / ODM      | MongoDB, Mongoose                                                                                                                                                                                  |
+| Validation          | [Joi](https://joi.dev/) (schema validation, all routes)                                                                                                                                            |
+| Auth                | Custom Bearer-token auth, [bcryptjs](https://github.com/dcodeIO/bcrypt.js) for password hashing, `uid2` for token/salt generation                                                                  |
+| File upload         | [express-fileupload](https://github.com/richardgirges/express-fileupload) + [Cloudinary](https://cloudinary.com/) for image hosting                                                                |
+| API docs            | [swagger-jsdoc](https://github.com/Surnet/swagger-jsdoc) + [swagger-ui-express](https://github.com/scottie1984/swagger-ui-express) (OpenAPI 3.0, generated from JSDoc comments in the route files) |
+| Tooling             | ESLint + Prettier, GitHub Actions CI (lint on every push/PR)                                                                                                                                       |
 
 _(Utility packages like `cors` and `dotenv` are used for standard config/CORS handling and aren't listed as architectural choices.)_
 
@@ -56,6 +57,8 @@ _(Utility packages like `cors` and `dotenv` are used for standard config/CORS ha
 Base URL: `http://localhost:3000` (or your configured `PORT`). All request/response bodies are JSON, except `publish`/`PUT`/`PATCH` which expect `multipart/form-data` (required for file upload, even on requests that only send text fields).
 
 Authenticated routes expect an `Authorization: Bearer <token>` header, using the token returned by signup/login.
+
+Interactive, explorable docs generated from these same routes are served at `/api-docs/` (raw OpenAPI document at `/api-docs.json`) - requesting `/api-docs` without the trailing slash redirects there.
 
 | Method | Route                   | Auth            | Description                                                                                                                                                                                                                                                                                |
 | ------ | ----------------------- | --------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |

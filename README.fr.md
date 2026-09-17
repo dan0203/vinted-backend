@@ -40,14 +40,15 @@ Aucune démo n'est actuellement déployée ; voir [Démarrage](#démarrage) pour
 
 ## Stack technique
 
-| Catégorie             | Choix                                                                                                                                                    |
-| --------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| Runtime / framework   | Node.js, Express 5 (routing, middlewares)                                                                                                                |
-| Base de données / ODM | MongoDB, Mongoose                                                                                                                                        |
-| Validation            | [Joi](https://joi.dev/) (validation par schéma, toutes les routes)                                                                                       |
-| Authentification      | Auth par token Bearer maison, [bcryptjs](https://github.com/dcodeIO/bcrypt.js) pour le hachage des mots de passe, `uid2` pour la génération de token/sel |
-| Upload de fichiers    | [express-fileupload](https://github.com/richardgirges/express-fileupload) + [Cloudinary](https://cloudinary.com/) pour l'hébergement d'images            |
-| Outillage             | ESLint + Prettier, CI GitHub Actions (lint à chaque push/PR)                                                                                             |
+| Catégorie             | Choix                                                                                                                                                                                                          |
+| --------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Runtime / framework   | Node.js, Express 5 (routing, middlewares)                                                                                                                                                                      |
+| Base de données / ODM | MongoDB, Mongoose                                                                                                                                                                                              |
+| Validation            | [Joi](https://joi.dev/) (validation par schéma, toutes les routes)                                                                                                                                             |
+| Authentification      | Auth par token Bearer maison, [bcryptjs](https://github.com/dcodeIO/bcrypt.js) pour le hachage des mots de passe, `uid2` pour la génération de token/sel                                                       |
+| Upload de fichiers    | [express-fileupload](https://github.com/richardgirges/express-fileupload) + [Cloudinary](https://cloudinary.com/) pour l'hébergement d'images                                                                  |
+| Documentation API     | [swagger-jsdoc](https://github.com/Surnet/swagger-jsdoc) + [swagger-ui-express](https://github.com/scottie1984/swagger-ui-express) (OpenAPI 3.0, générée depuis les commentaires JSDoc des fichiers de routes) |
+| Outillage             | ESLint + Prettier, CI GitHub Actions (lint à chaque push/PR)                                                                                                                                                   |
 
 _(Les paquets utilitaires comme `cors` et `dotenv` servent à la configuration standard et ne sont pas listés comme des choix d'architecture.)_
 
@@ -56,6 +57,8 @@ _(Les paquets utilitaires comme `cors` et `dotenv` servent à la configuration s
 URL de base : `http://localhost:3000` (ou le `PORT` configuré). Tous les corps de requête/réponse sont en JSON, sauf `publish`/`PUT`/`PATCH` qui attendent du `multipart/form-data` (nécessaire pour l'upload de fichiers, même sur les requêtes qui n'envoient que des champs texte).
 
 Les routes authentifiées attendent un header `Authorization: Bearer <token>`, avec le token renvoyé par l'inscription/connexion.
+
+Une documentation interactive et explorable, générée à partir de ces mêmes routes, est servie à `/api-docs/` (document OpenAPI brut à `/api-docs.json`) - une requête vers `/api-docs` sans le slash final redirige vers cette adresse.
 
 | Méthode | Route             | Auth                         | Description                                                                                                                                                                                                 |
 | ------- | ----------------- | ---------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |

@@ -1,10 +1,12 @@
 const express = require('express');
 const cors = require('cors');
 const helmet = require('helmet');
+const swaggerUi = require('swagger-ui-express');
 const sanitizeMongo = require('./middlewares/sanitizeMongo');
 const cloudinary = require('cloudinary').v2;
 const userRoutes = require('./routes/user.route');
 const offerRoutes = require('./routes/offer.route');
+const openapiSpec = require('./config/swagger');
 
 cloudinary.config({
     cloud_name: process.env.CLOUDINARY_CLOUD_NAME,
@@ -21,6 +23,8 @@ app.use(sanitizeMongo);
 
 app.use('/users', userRoutes);
 app.use('/offers', offerRoutes);
+app.get('/api-docs.json', (req, res) => res.json(openapiSpec));
+app.use('/api-docs', swaggerUi.serve, swaggerUi.setup(openapiSpec));
 app.all(/.*/, (req, res) => {
     res.status(404).json({ message: 'The route does not exist' });
 });
