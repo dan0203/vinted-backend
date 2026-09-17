@@ -25,4 +25,35 @@ jobs:
               with:
                   node-version: 20
             - run: npm ci
-            - run: npm test
+            - run: npm run test:coverage
+
+    audit:
+        runs-on: ubuntu-latest
+        continue-on-error: true
+        steps:
+            - uses: actions/checkout@v4
+            - uses: actions/setup-node@v4
+              with:
+                  node-version: 20
+            - run: npm ci
+            - run: npm run security
+
+    coverage-badges:
+        if: github.event_name == 'push'
+        needs: test
+        runs-on: ubuntu-latest
+        permissions:
+            contents: write
+        steps:
+            - uses: actions/checkout@v4
+            - uses: actions/setup-node@v4
+              with:
+                  node-version: 20
+            - run: npm ci
+            - run: npm run test:coverage
+            - run: npm run make-badges
+            - name: Commit updated badges
+              run: |
+                  git config user.name "github-actions[bot]"
+                  git config user.email "github-actions[bot]@users.noreply.github.com"
+                  git diff --quiet README.md || (git add README.md && git commit -m "chore: update coverage badges" && git push)

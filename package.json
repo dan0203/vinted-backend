@@ -6,7 +6,10 @@
     "scripts": {
         "test": "jest",
         "test:watch": "jest --watch",
-        "start": "npx nodemon index.js",
+        "test:coverage": "jest --coverage --coverageReporters=json-summary --coverageReporters=text",
+        "make-badges": "istanbul-badges-readme --coverageDir=coverage",
+        "dev": "nodemon index.js",
+        "start": "node index.js",
         "lint": "eslint .",
         "format": "prettier --write .",
         "format:check": "prettier --check .",
@@ -47,8 +50,10 @@
         "eslint": "^10.10.0",
         "eslint-config-prettier": "^10.1.8",
         "globals": "^17.12.0",
+        "istanbul-badges-readme": "^1.9.0",
         "jest": "^30.5.1",
         "mongodb-memory-server": "^11.2.0",
+        "nodemon": "^3.1.14",
         "prettier": "^3.9.6",
         "supertest": "^7.2.2"
     }
