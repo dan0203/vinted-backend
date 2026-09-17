@@ -14,6 +14,8 @@ const upload = fileUpload({
 
 router.post('/signup', authLimiter, userController.signup);
 router.post('/login', authLimiter, userController.login);
+router.get('/confirm/:token', userController.confirmEmail);
+router.post('/confirm/resend', authLimiter, userController.resendConfirmation);
 router.get('/:id', userController.getOne);
 router.put('/:id', isAuthenticated, upload, userController.update);
 router.patch('/:id', isAuthenticated, upload, userController.updatePartial);

@@ -11,7 +11,7 @@ const isAuthenticated = async (req, res, next) => {
         // _id is included even though it's not in select(): Mongoose always
         // returns it unless explicitly excluded (-_id).
         const user = await User.findOne({ token }).select(
-            'email account tokenIssuedAt'
+            'email account tokenIssuedAt active'
         );
 
         if (!user) {
@@ -21,6 +21,12 @@ const isAuthenticated = async (req, res, next) => {
         const tokenAge = Date.now() - user.tokenIssuedAt.getTime();
         if (tokenAge > MAX_TOKEN_AGE_MS) {
             return res.status(401).json({ message: 'Unauthorized' });
+        }
+
+        if (!user.active) {
+            return res.status(403).json({
+                message: 'Please confirm your email address before logging in',
+            });
         }
 
         // req is shared with the controller, so attaching it here makes it

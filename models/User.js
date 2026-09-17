@@ -14,6 +14,9 @@ const userSchema = new Schema({
     tokenIssuedAt: { type: Date, required: true, default: Date.now },
     failedLoginAttempts: { type: Number, required: true, default: 0 },
     lockUntil: { type: Date, default: null },
+    active: { type: Boolean, required: true, default: false },
+    confirmationToken: { type: String, default: null },
+    confirmationTokenExpiresAt: { type: Date, default: null },
 });
 
 const User = mongoose.model('User', userSchema);

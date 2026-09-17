@@ -20,6 +20,26 @@ const login = async (req, res, next) => {
     }
 };
 
+const confirmEmail = async (req, res, next) => {
+    try {
+        const user = await userService.confirmEmail(req.params);
+
+        return res.status(200).json(user);
+    } catch (error) {
+        next(error);
+    }
+};
+
+const resendConfirmation = async (req, res, next) => {
+    try {
+        const result = await userService.resendConfirmation(req.body);
+
+        return res.status(200).json(result);
+    } catch (error) {
+        next(error);
+    }
+};
+
 const getOne = async (req, res, next) => {
     try {
         const data = req.params;
@@ -75,6 +95,8 @@ const remove = async (req, res, next) => {
 module.exports = {
     signup,
     login,
+    confirmEmail,
+    resendConfirmation,
     getOne,
     update,
     updatePartial,

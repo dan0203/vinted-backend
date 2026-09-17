@@ -1,8 +1,20 @@
 const request = require('supertest');
 const app = require('../app');
-const { connect, clearDatabase, closeDatabase } = require('./setupTestDb');
+const {
+    connect,
+    clearDatabase,
+    closeDatabase,
+    activateUser,
+} = require('./setupTestDb');
 const cloudinary = require('../utils/cloudinary');
 const mongooseOrThrow = require('../utils/mongooseOrThrow');
+
+// Mocks the Resend wrapper so signup here never hits the real network,
+// mirroring tests/user.test.js.
+jest.mock('../utils/email', () => ({
+    sendConfirmationEmail: jest.fn().mockResolvedValue(undefined),
+    sendNewsletterWelcomeEmail: jest.fn().mockResolvedValue(undefined),
+}));
 
 // The picture is required on publish/update: Cloudinary is mocked so tests
 // don't depend on the network or real credentials.
@@ -73,6 +85,7 @@ beforeEach(async () => {
         username: 'seller',
     });
     token = signupResponse.body.token;
+    await activateUser('seller@example.com');
 });
 
 afterEach(async () => {
@@ -334,6 +347,7 @@ const testsCommonToUpdateMethods = (method, getOfferId, attachFields) => {
             password: 'secret123',
             username: 'other',
         });
+        await activateUser('other@example.com');
 
         const response = await attachFields(
             request(app)
@@ -713,6 +727,7 @@ describe('DELETE /offers/:id', () => {
             password: 'secret123',
             username: 'other',
         });
+        await activateUser('other@example.com');
 
         const response = await request(app)
             .delete(`/offers/${offerId}`)

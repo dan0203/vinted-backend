@@ -1,9 +1,22 @@
 const request = require('supertest');
 const app = require('../app');
-const { connect, clearDatabase, closeDatabase } = require('./setupTestDb');
+const {
+    connect,
+    clearDatabase,
+    closeDatabase,
+    activateUser,
+} = require('./setupTestDb');
 const cloudinary = require('../utils/cloudinary');
+const email = require('../utils/email');
 const User = require('../models/User');
 const { MAX_TOKEN_AGE_MS, MAX_LOGIN_ATTEMPTS } = require('../utils/constants');
+
+// Mocks the Resend wrapper for signup/confirm/resend so no real network
+// call is made and tests can assert on which emails were sent.
+jest.mock('../utils/email', () => ({
+    sendConfirmationEmail: jest.fn().mockResolvedValue(undefined),
+    sendNewsletterWelcomeEmail: jest.fn().mockResolvedValue(undefined),
+}));
 
 // Mocks Cloudinary for PUT/PATCH /users/:id (avatar) and, indirectly, for
 // the DELETE cascade that goes through offer.service (publishing/removing offers).
@@ -76,6 +89,21 @@ describe('POST /users/signup', () => {
 
         expect(response.status).toBe(409);
     });
+
+    it('creates the account inactive and sends a confirmation email', async () => {
+        await request(app).post('/users/signup').send({
+            email: 'jane@example.com',
+            password: 'secret123',
+            username: 'jane',
+        });
+
+        const user = await User.findOne({ email: 'jane@example.com' });
+        expect(user.active).toBe(false);
+        expect(email.sendConfirmationEmail).toHaveBeenCalledWith(
+            'jane@example.com',
+            user.confirmationToken
+        );
+    });
 });
 
 describe('POST /users/login', () => {
@@ -85,6 +113,7 @@ describe('POST /users/login', () => {
             password: 'secret123',
             username: 'jane',
         });
+        await activateUser('jane@example.com');
     });
 
     it('logs in with correct credentials', async () => {
@@ -151,6 +180,206 @@ describe('POST /users/login', () => {
             expect(response.status).toBe(403);
         }
     });
+
+    it('rejects login on an unconfirmed account, after password verification succeeds', async () => {
+        await request(app).post('/users/signup').send({
+            email: 'unconfirmed@example.com',
+            password: 'secret123',
+            username: 'unconfirmed',
+        });
+
+        const wrongPassword = await request(app).post('/users/login').send({
+            email: 'unconfirmed@example.com',
+            password: 'wrongPassword',
+        });
+        expect(wrongPassword.status).toBe(403);
+        expect(wrongPassword.body.message).toBe('Unauthorized');
+
+        const response = await request(app).post('/users/login').send({
+            email: 'unconfirmed@example.com',
+            password: 'secret123',
+        });
+
+        expect(response.status).toBe(403);
+        expect(response.body.message).toMatch(/confirm/i);
+    });
+});
+
+describe('authenticated routes on an unconfirmed account', () => {
+    it('rejects a signup-issued token with 403', async () => {
+        const signupResponse = await request(app).post('/users/signup').send({
+            email: 'unconfirmed@example.com',
+            password: 'secret123',
+            username: 'unconfirmed',
+        });
+
+        const response = await request(app)
+            .patch(`/users/${signupResponse.body._id}`)
+            .set('Authorization', `Bearer ${signupResponse.body.token}`)
+            .field('newsletter', 'true');
+
+        expect(response.status).toBe(403);
+        expect(response.body.message).toMatch(/confirm/i);
+    });
+});
+
+describe('GET /users/confirm/:token', () => {
+    it('activates the account, clears the token, and allows login', async () => {
+        const signupResponse = await request(app).post('/users/signup').send({
+            email: 'jane@example.com',
+            password: 'secret123',
+            username: 'jane',
+        });
+        const user = await User.findOne({ email: 'jane@example.com' });
+
+        const response = await request(app).get(
+            `/users/confirm/${user.confirmationToken}`
+        );
+
+        expect(response.status).toBe(200);
+        expect(response.body.active).toBe(true);
+
+        const confirmedUser = await User.findById(signupResponse.body._id);
+        expect(confirmedUser.confirmationToken).toBeNull();
+
+        const login = await request(app).post('/users/login').send({
+            email: 'jane@example.com',
+            password: 'secret123',
+        });
+        expect(login.status).toBe(200);
+    });
+
+    it('rejects an unknown token and leaves the account inactive', async () => {
+        await request(app).post('/users/signup').send({
+            email: 'jane@example.com',
+            password: 'secret123',
+            username: 'jane',
+        });
+
+        const response = await request(app).get(
+            '/users/confirm/not-a-real-token'
+        );
+
+        expect(response.status).toBe(400);
+
+        const user = await User.findOne({ email: 'jane@example.com' });
+        expect(user.active).toBe(false);
+    });
+
+    it('rejects an expired token and leaves the account inactive', async () => {
+        await request(app).post('/users/signup').send({
+            email: 'jane@example.com',
+            password: 'secret123',
+            username: 'jane',
+        });
+        const user = await User.findOne({ email: 'jane@example.com' });
+        await User.findByIdAndUpdate(user._id, {
+            confirmationTokenExpiresAt: new Date(Date.now() - 1000),
+        });
+
+        const response = await request(app).get(
+            `/users/confirm/${user.confirmationToken}`
+        );
+
+        expect(response.status).toBe(400);
+
+        const stillInactive = await User.findById(user._id);
+        expect(stillInactive.active).toBe(false);
+    });
+
+    it('sends the newsletter welcome email only when newsletter is true', async () => {
+        await request(app).post('/users/signup').send({
+            email: 'subscriber@example.com',
+            password: 'secret123',
+            username: 'subscriber',
+            newsletter: true,
+        });
+        const subscriber = await User.findOne({
+            email: 'subscriber@example.com',
+        });
+
+        await request(app).post('/users/signup').send({
+            email: 'nonsubscriber@example.com',
+            password: 'secret123',
+            username: 'nonsubscriber',
+        });
+        const nonSubscriber = await User.findOne({
+            email: 'nonsubscriber@example.com',
+        });
+
+        await request(app).get(
+            `/users/confirm/${subscriber.confirmationToken}`
+        );
+        expect(email.sendNewsletterWelcomeEmail).toHaveBeenCalledWith(
+            'subscriber@example.com'
+        );
+
+        const callsBefore = email.sendNewsletterWelcomeEmail.mock.calls.length;
+        await request(app).get(
+            `/users/confirm/${nonSubscriber.confirmationToken}`
+        );
+        expect(email.sendNewsletterWelcomeEmail.mock.calls.length).toBe(
+            callsBefore
+        );
+    });
+});
+
+describe('POST /users/confirm/resend', () => {
+    it('re-sends a fresh confirmation email for an inactive account', async () => {
+        await request(app).post('/users/signup').send({
+            email: 'jane@example.com',
+            password: 'secret123',
+            username: 'jane',
+        });
+        const originalUser = await User.findOne({
+            email: 'jane@example.com',
+        });
+
+        const response = await request(app)
+            .post('/users/confirm/resend')
+            .send({ email: 'jane@example.com' });
+
+        expect(response.status).toBe(200);
+
+        const updatedUser = await User.findOne({ email: 'jane@example.com' });
+        expect(updatedUser.confirmationToken).not.toBe(
+            originalUser.confirmationToken
+        );
+        expect(email.sendConfirmationEmail).toHaveBeenCalledWith(
+            'jane@example.com',
+            updatedUser.confirmationToken
+        );
+    });
+
+    it('returns the same 200 for an unknown email, without sending anything', async () => {
+        const callsBefore = email.sendConfirmationEmail.mock.calls.length;
+
+        const response = await request(app)
+            .post('/users/confirm/resend')
+            .send({ email: 'unknown@example.com' });
+
+        expect(response.status).toBe(200);
+        expect(response.body).toEqual({ message: 'Confirmation email sent' });
+        expect(email.sendConfirmationEmail.mock.calls.length).toBe(callsBefore);
+    });
+
+    it('returns the same 200 for an already-active account, without sending anything', async () => {
+        await request(app).post('/users/signup').send({
+            email: 'jane@example.com',
+            password: 'secret123',
+            username: 'jane',
+        });
+        await activateUser('jane@example.com');
+        const callsBefore = email.sendConfirmationEmail.mock.calls.length;
+
+        const response = await request(app)
+            .post('/users/confirm/resend')
+            .send({ email: 'jane@example.com' });
+
+        expect(response.status).toBe(200);
+        expect(response.body).toEqual({ message: 'Confirmation email sent' });
+        expect(email.sendConfirmationEmail.mock.calls.length).toBe(callsBefore);
+    });
 });
 
 // Behaviors common to PUT/PATCH/DELETE /users/:id: auth required, and 403
@@ -171,6 +400,7 @@ const testsCommonToSelfOnlyMethods = (method, getUserId, attachFields) => {
             password: 'secret123',
             username: 'other',
         });
+        await activateUser('other@example.com');
 
         const response = await attachFields(
             request(app)
@@ -194,6 +424,7 @@ describe('PUT /users/:id', () => {
         });
         userId = signupResponse.body._id;
         token = signupResponse.body.token;
+        await activateUser('jane@example.com');
     });
 
     testsCommonToSelfOnlyMethods(
@@ -272,6 +503,7 @@ describe('token expiration', () => {
         const token = signupResponse.body.token;
 
         await User.findByIdAndUpdate(userId, {
+            active: true,
             tokenIssuedAt: new Date(Date.now() - MAX_TOKEN_AGE_MS - 1000),
         });
 
@@ -296,6 +528,7 @@ describe('PATCH /users/:id', () => {
         });
         userId = signupResponse.body._id;
         token = signupResponse.body.token;
+        await activateUser('jane@example.com');
     });
 
     testsCommonToSelfOnlyMethods(
@@ -336,6 +569,7 @@ describe('DELETE /users/:id', () => {
         });
         userId = signupResponse.body._id;
         token = signupResponse.body.token;
+        await activateUser('jane@example.com');
     });
 
     testsCommonToSelfOnlyMethods(

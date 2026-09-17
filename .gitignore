@@ -3,3 +3,9 @@ node_modules
 json
 data
 services/offer.service.legacy.js
+
+# AI Blueprint local workflow files
+.agents/
+.claude/
+blueprint/
+CLAUDE.md

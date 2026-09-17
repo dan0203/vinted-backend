@@ -17,9 +17,14 @@ const {
     findOneAndDeleteOrThrow,
 } = require('../utils/mongooseOrThrow');
 const {
+    sendConfirmationEmail,
+    sendNewsletterWelcomeEmail,
+} = require('../utils/email');
+const {
     USER,
     MAX_LOGIN_ATTEMPTS,
     ACCOUNT_LOCK_MS,
+    CONFIRMATION_TOKEN_TTL_MS,
 } = require('../utils/constants');
 
 const signupSchema = Joi.object({
@@ -33,6 +38,21 @@ const loginSchema = Joi.object({
     email: Joi.string().email().required(),
     password: Joi.string().min(6).required(),
 });
+
+const resendConfirmationSchema = Joi.object({
+    email: Joi.string().email().required(),
+});
+
+const confirmEmailSchema = Joi.object({
+    token: Joi.string().required(),
+});
+
+function issueConfirmationToken(user) {
+    user.confirmationToken = uid2(32);
+    user.confirmationTokenExpiresAt = new Date(
+        Date.now() + CONFIRMATION_TOKEN_TTL_MS
+    );
+}
 
 // username/newsletter only: email and password aren't modified through
 // these routes. avatar (file) is validated separately, like picture/pictures
@@ -59,6 +79,9 @@ function assertValid(schema, value) {
     return validated;
 }
 
+// Deliberately omits `active`: this DTO backs the public GET /users/:id as
+// well as the authenticated update/remove routes, and confirmation status
+// isn't meant to be learnable by an arbitrary caller who knows an id.
 function toUserDTO(user) {
     return {
         _id: user._id,
@@ -104,8 +127,13 @@ const signup = async (data) => {
         hash,
         token,
     });
+    issueConfirmationToken(newUser);
 
     await newUser.save();
+
+    // Fire-and-forget: never awaited, so a slow/hanging Resend call can't
+    // hold this response open. utils/email.js swallows its own failures.
+    sendConfirmationEmail(newUser.email, newUser.confirmationToken);
 
     return {
         _id: newUser._id,
@@ -142,6 +170,10 @@ const login = async (data) => {
         throwError('Unauthorized', 403);
     }
 
+    if (!user.active) {
+        throwError('Please confirm your email address before logging in', 403);
+    }
+
     user.failedLoginAttempts = 0;
     user.lockUntil = null;
     user.token = uid2(16);
@@ -155,6 +187,53 @@ const login = async (data) => {
             username: user.account.username,
         },
     };
+};
+
+const confirmEmail = async (data) => {
+    data = assertValid(confirmEmailSchema, data);
+
+    const user = await User.findOneAndUpdate(
+        {
+            confirmationToken: data.token,
+            confirmationTokenExpiresAt: { $gt: new Date() },
+        },
+        {
+            active: true,
+            confirmationToken: null,
+            confirmationTokenExpiresAt: null,
+        },
+        { returnDocument: 'after' }
+    );
+    if (!user) {
+        throwError('Invalid or expired confirmation link', 400);
+    }
+
+    if (user.newsletter === true) {
+        sendNewsletterWelcomeEmail(user.email);
+    }
+
+    // Included here only: the caller already proved ownership by holding
+    // the one-time token, unlike the generic DTO other routes return.
+    return { ...toUserDTO(user), active: user.active };
+};
+
+// Always responds the same way regardless of whether the email is unknown,
+// already active, or genuinely inactive: an unauthenticated caller must not
+// be able to learn account existence or confirmation status from this
+// endpoint. Only the real inactive-account case rotates the token and sends
+// mail; the other two are a silent no-op.
+const resendConfirmation = async (data) => {
+    data = assertValid(resendConfirmationSchema, data);
+
+    const user = await User.findOne({ email: data.email });
+    if (user && !user.active) {
+        issueConfirmationToken(user);
+        await user.save();
+
+        sendConfirmationEmail(user.email, user.confirmationToken);
+    }
+
+    return { message: 'Confirmation email sent' };
 };
 
 const getOne = async (data) => {
@@ -259,4 +338,13 @@ const remove = async (data) => {
     return toUserDTO(removedUser);
 };
 
-module.exports = { signup, login, getOne, update, updatePartial, remove };
+module.exports = {
+    signup,
+    login,
+    confirmEmail,
+    resendConfirmation,
+    getOne,
+    update,
+    updatePartial,
+    remove,
+};

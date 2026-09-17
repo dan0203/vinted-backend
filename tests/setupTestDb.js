@@ -1,5 +1,6 @@
 const { MongoMemoryServer } = require('mongodb-memory-server');
 const mongoose = require('mongoose');
+const User = require('../models/User');
 
 let mongoServer;
 
@@ -25,4 +26,11 @@ const closeDatabase = async () => {
     await mongoServer.stop();
 };
 
-module.exports = { connect, clearDatabase, closeDatabase };
+// Activates a signed-up account directly in the DB, bypassing the email
+// confirmation link — every existing signup-then-login/authenticated flow
+// needs this now that accounts are created inactive by default.
+const activateUser = async (email) => {
+    await User.findOneAndUpdate({ email }, { active: true });
+};
+
+module.exports = { connect, clearDatabase, closeDatabase, activateUser };
