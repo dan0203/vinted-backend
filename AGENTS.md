@@ -55,6 +55,7 @@ and installed dependencies before adding machinery.
 - Lint: `npm run lint`
 - Format check: `npm run format:check`
 - Format (write): `npm run format`
+- Security: `npm run security` (`npm audit` against installed dependencies)
 
 Testing gate: `npm test` is configured and must pass before changes are
 considered done. CI (`.github/workflows/ci.yml`) runs lint, format:check, and
