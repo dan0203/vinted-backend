@@ -121,10 +121,42 @@ async function deleteFolder(folderPath) {
     }
 }
 
+// Deletes every asset under `folderPath` (including nested per-resource
+// subfolders, e.g. vinted/offers/<offerId>) and the now-empty folders
+// themselves. Used by the seed script to reset Cloudinary before re-seeding.
+async function emptyFolder(folderPath) {
+    try {
+        await cloudinary.api.delete_resources_by_prefix(folderPath);
+    } catch (error) {
+        if (error.http_code !== 404) {
+            throwError(
+                `Cloudinary folder cleanup failed: ${error.message}`,
+                500
+            );
+        }
+    }
+
+    let subFolders;
+    try {
+        ({ folders: subFolders } =
+            await cloudinary.api.sub_folders(folderPath));
+    } catch (error) {
+        if (error.http_code === 404) return;
+        throwError(`Cloudinary folder cleanup failed: ${error.message}`, 500);
+    }
+
+    for (const folder of subFolders) {
+        await deleteFolder(folder.path);
+    }
+
+    await deleteFolder(folderPath);
+}
+
 module.exports = {
     uploadImage,
     uploadImages,
     uploadAvatar,
     removeImage,
     deleteFolder,
+    emptyFolder,
 };
