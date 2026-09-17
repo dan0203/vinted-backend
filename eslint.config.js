@@ -3,6 +3,9 @@ const globals = require('globals');
 const prettierConfig = require('eslint-config-prettier');
 
 module.exports = [
+    {
+        ignores: ['.agents/**', '.claude/**'],
+    },
     js.configs.recommended,
     prettierConfig,
     {
