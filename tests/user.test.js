@@ -601,6 +601,44 @@ const testsCommonToSelfOnlyMethods = (method, getUserId, attachFields) => {
     });
 };
 
+describe('GET /users/:id', () => {
+    let userId;
+
+    beforeEach(async () => {
+        const signupResponse = await request(app).post('/users/signup').send({
+            email: 'jane@example.com',
+            password: 'secret123',
+            username: 'jane',
+        });
+        userId = signupResponse.body._id;
+        await activateUser('jane@example.com');
+    });
+
+    it("returns a user's public profile", async () => {
+        const response = await request(app).get(`/users/${userId}`);
+
+        expect(response.status).toBe(200);
+        expect(response.body._id).toBe(userId);
+        expect(response.body.account.username).toBe('jane');
+        expect(response.body).not.toHaveProperty('hash');
+        expect(response.body).not.toHaveProperty('email');
+    });
+
+    it('rejects a malformed id', async () => {
+        const response = await request(app).get('/users/not-a-valid-id');
+
+        expect(response.status).toBe(400);
+    });
+
+    it('returns 404 for a well-formed but non-existent id', async () => {
+        const response = await request(app).get(
+            '/users/507f1f77bcf86cd799439011'
+        );
+
+        expect(response.status).toBe(404);
+    });
+});
+
 describe('PUT /users/:id', () => {
     let userId;
     let token;
@@ -720,6 +758,25 @@ describe('token expiration', () => {
             .put(`/users/${userId}`)
             .set('Authorization', `Bearer ${forgedToken}`)
             .field('username', 'stillforged');
+
+        expect(response.status).toBe(401);
+    });
+
+    it('rejects a validly signed token for a user that no longer exists', async () => {
+        const signupResponse = await request(app).post('/users/signup').send({
+            email: 'ghost@example.com',
+            password: 'secret123',
+            username: 'ghost',
+        });
+        const userId = signupResponse.body._id;
+        const token = signupResponse.body.accessToken;
+        await activateUser('ghost@example.com');
+        await User.findByIdAndDelete(userId);
+
+        const response = await request(app)
+            .put(`/users/${userId}`)
+            .set('Authorization', `Bearer ${token}`)
+            .field('username', 'irrelevant');
 
         expect(response.status).toBe(401);
     });
@@ -914,6 +971,14 @@ describe('DELETE /users/:id', () => {
 
         const offers = await request(app).get('/offers');
         expect(offers.body.count).toBe(0);
+    });
+
+    it('deletes an account with no offers without crashing the cascade', async () => {
+        const response = await request(app)
+            .delete(`/users/${userId}`)
+            .set('Authorization', `Bearer ${token}`);
+
+        expect(response.status).toBe(200);
     });
 
     it("removes a deleted offer from another user's favorites", async () => {
