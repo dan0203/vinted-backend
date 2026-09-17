@@ -110,6 +110,16 @@ async function removeImage(publicId) {
     }
 }
 
+// The Admin/Search APIs report errors as { error: { message, http_code } }
+// rather than on the error object itself.
+function cloudinaryErrorMessage(error) {
+    return error.error?.message || error.message;
+}
+
+function cloudinaryErrorStatus(error) {
+    return error.error?.http_code || error.http_code;
+}
+
 // Cloudinary requires a folder to be empty before deleting it: all assets it
 // contains must already have been destroyed via removeImage() before
 // calling this one.
@@ -117,23 +127,53 @@ async function deleteFolder(folderPath) {
     try {
         await cloudinary.api.delete_folder(folderPath);
     } catch (error) {
-        throwError(`Remove Cloudinary failed: ${error.message}`, 500);
+        throwError(
+            `Remove Cloudinary failed: ${cloudinaryErrorMessage(error)}`,
+            500
+        );
     }
 }
+
+const SEARCH_PAGE_SIZE = 500;
+// Cloudinary's delete_resources endpoint accepts at most 100 public IDs per call.
+const DELETE_BATCH_SIZE = 100;
 
 // Deletes every asset under `folderPath` (including nested per-resource
 // subfolders, e.g. vinted/offers/<offerId>) and the now-empty folders
 // themselves. Used by the seed script to reset Cloudinary before re-seeding.
+//
+// Assets are uploaded here via the `asset_folder` option (Cloudinary's
+// dynamic folder mode), which assigns them a random public_id unrelated to
+// the folder path. delete_resources_by_prefix (public_id-based) therefore
+// cannot find them: the Search API, which indexes the `folder` attribute
+// directly, is used instead.
 async function emptyFolder(folderPath) {
     try {
-        await cloudinary.api.delete_resources_by_prefix(folderPath);
-    } catch (error) {
-        if (error.http_code !== 404) {
-            throwError(
-                `Cloudinary folder cleanup failed: ${error.message}`,
-                500
+        let nextCursor;
+        do {
+            const search = cloudinary.search
+                .expression(`folder:${folderPath} OR folder:${folderPath}/*`)
+                .max_results(SEARCH_PAGE_SIZE);
+            if (nextCursor) search.next_cursor(nextCursor);
+
+            const result = await search.execute();
+            const publicIds = result.resources.map(
+                (resource) => resource.public_id
             );
-        }
+
+            for (let i = 0; i < publicIds.length; i += DELETE_BATCH_SIZE) {
+                await cloudinary.api.delete_resources(
+                    publicIds.slice(i, i + DELETE_BATCH_SIZE)
+                );
+            }
+
+            nextCursor = result.next_cursor;
+        } while (nextCursor);
+    } catch (error) {
+        throwError(
+            `Cloudinary folder cleanup failed: ${cloudinaryErrorMessage(error)}`,
+            500
+        );
     }
 
     let subFolders;
@@ -141,8 +181,11 @@ async function emptyFolder(folderPath) {
         ({ folders: subFolders } =
             await cloudinary.api.sub_folders(folderPath));
     } catch (error) {
-        if (error.http_code === 404) return;
-        throwError(`Cloudinary folder cleanup failed: ${error.message}`, 500);
+        if (cloudinaryErrorStatus(error) === 404) return;
+        throwError(
+            `Cloudinary folder cleanup failed: ${cloudinaryErrorMessage(error)}`,
+            500
+        );
     }
 
     for (const folder of subFolders) {
