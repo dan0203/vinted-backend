@@ -20,6 +20,7 @@ const {
 const {
     sendConfirmationEmail,
     sendNewsletterWelcomeEmail,
+    sendPasswordResetEmail,
 } = require('../utils/email');
 const {
     USER,
@@ -27,6 +28,7 @@ const {
     MAX_LOGIN_ATTEMPTS,
     ACCOUNT_LOCK_MS,
     CONFIRMATION_TOKEN_TTL_MS,
+    RESET_TOKEN_TTL_MS,
 } = require('../utils/constants');
 
 const signupSchema = Joi.object({
@@ -47,6 +49,15 @@ const resendConfirmationSchema = Joi.object({
 
 const confirmEmailSchema = Joi.object({
     token: Joi.string().required(),
+});
+
+const requestPasswordResetSchema = Joi.object({
+    email: Joi.string().email().required(),
+});
+
+const confirmPasswordResetSchema = Joi.object({
+    token: Joi.string().required(),
+    password: Joi.string().min(6).required(),
 });
 
 function issueConfirmationToken(user) {
@@ -246,6 +257,64 @@ const resendConfirmation = async (data) => {
     return { message: 'Confirmation email sent' };
 };
 
+// Same anti-enumeration shape as resendConfirmation: always the same
+// response, and only a genuine match rotates a token and sends mail.
+const requestPasswordReset = async (data) => {
+    data = assertValid(requestPasswordResetSchema, data);
+
+    const user = await User.findOne({ email: data.email });
+    if (user) {
+        user.resetToken = uid2(32);
+        user.resetTokenExpiresAt = new Date(Date.now() + RESET_TOKEN_TTL_MS);
+        await user.save();
+
+        sendPasswordResetEmail(user.email, user.resetToken);
+    }
+
+    return { message: 'Password reset email sent' };
+};
+
+// Checks the token before hashing the new password, so an invalid/expired
+// attempt doesn't pay for a bcrypt round it can't use. The final write still
+// filters on the token itself (not just _id), so a second request racing on
+// the same now-consumed token still gets the same 400 instead of a second
+// successful reset. Rotating the session token invalidates any bearer token
+// issued before the reset, and clearing the lockout fields means a
+// legitimate reset isn't blocked by a stale failed-login lock.
+const confirmPasswordReset = async (data) => {
+    data = assertValid(confirmPasswordResetSchema, data);
+
+    const tokenFilter = {
+        resetToken: data.token,
+        resetTokenExpiresAt: { $gt: new Date() },
+    };
+    const candidate = await User.findOne(tokenFilter);
+    if (!candidate) {
+        throwError('Invalid or expired reset link', 400);
+    }
+
+    const hash = await bcrypt.hash(data.password, 10);
+
+    const user = await User.findOneAndUpdate(
+        tokenFilter,
+        {
+            hash,
+            resetToken: null,
+            resetTokenExpiresAt: null,
+            token: uid2(16),
+            tokenIssuedAt: new Date(),
+            failedLoginAttempts: 0,
+            lockUntil: null,
+        },
+        updateOptions
+    );
+    if (!user) {
+        throwError('Invalid or expired reset link', 400);
+    }
+
+    return { message: 'Password has been reset' };
+};
+
 const getOne = async (data) => {
     assertValidObjectId(data.id, USER);
 
@@ -408,6 +477,8 @@ module.exports = {
     login,
     confirmEmail,
     resendConfirmation,
+    requestPasswordReset,
+    confirmPasswordReset,
     getOne,
     update,
     updatePartial,

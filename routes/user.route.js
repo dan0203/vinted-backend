@@ -16,6 +16,8 @@ router.post('/signup', authLimiter, userController.signup);
 router.post('/login', authLimiter, userController.login);
 router.get('/confirm/:token', userController.confirmEmail);
 router.post('/confirm/resend', authLimiter, userController.resendConfirmation);
+router.post('/reset/request', authLimiter, userController.requestPasswordReset);
+router.post('/reset/confirm', authLimiter, userController.confirmPasswordReset);
 router.get('/:id', userController.getOne);
 router.put('/:id', isAuthenticated, upload, userController.update);
 router.patch('/:id', isAuthenticated, upload, userController.updatePartial);

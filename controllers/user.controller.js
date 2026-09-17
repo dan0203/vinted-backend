@@ -40,6 +40,26 @@ const resendConfirmation = async (req, res, next) => {
     }
 };
 
+const requestPasswordReset = async (req, res, next) => {
+    try {
+        const result = await userService.requestPasswordReset(req.body);
+
+        return res.status(200).json(result);
+    } catch (error) {
+        next(error);
+    }
+};
+
+const confirmPasswordReset = async (req, res, next) => {
+    try {
+        const result = await userService.confirmPasswordReset(req.body);
+
+        return res.status(200).json(result);
+    } catch (error) {
+        next(error);
+    }
+};
+
 const getOne = async (req, res, next) => {
     try {
         const data = req.params;
@@ -127,6 +147,8 @@ module.exports = {
     login,
     confirmEmail,
     resendConfirmation,
+    requestPasswordReset,
+    confirmPasswordReset,
     getOne,
     update,
     updatePartial,

@@ -17,6 +17,7 @@ const { MAX_TOKEN_AGE_MS, MAX_LOGIN_ATTEMPTS } = require('../utils/constants');
 jest.mock('../utils/email', () => ({
     sendConfirmationEmail: jest.fn().mockResolvedValue(undefined),
     sendNewsletterWelcomeEmail: jest.fn().mockResolvedValue(undefined),
+    sendPasswordResetEmail: jest.fn().mockResolvedValue(undefined),
 }));
 
 // Mocks Cloudinary for PUT/PATCH /users/:id (avatar) and, indirectly, for
@@ -380,6 +381,172 @@ describe('POST /users/confirm/resend', () => {
         expect(response.status).toBe(200);
         expect(response.body).toEqual({ message: 'Confirmation email sent' });
         expect(email.sendConfirmationEmail.mock.calls.length).toBe(callsBefore);
+    });
+});
+
+describe('password reset', () => {
+    const signupAndActivate = async (email = 'jane@example.com') => {
+        await request(app).post('/users/signup').send({
+            email,
+            password: 'secret123',
+            username: 'jane',
+        });
+        await activateUser(email);
+    };
+
+    describe('POST /users/reset/request', () => {
+        it('issues a reset token and emails it for a known account', async () => {
+            await signupAndActivate();
+
+            const response = await request(app)
+                .post('/users/reset/request')
+                .send({ email: 'jane@example.com' });
+
+            expect(response.status).toBe(200);
+
+            const user = await User.findOne({ email: 'jane@example.com' });
+            expect(user.resetToken).toBeTruthy();
+            expect(user.resetTokenExpiresAt).toBeTruthy();
+            expect(email.sendPasswordResetEmail).toHaveBeenCalledWith(
+                'jane@example.com',
+                user.resetToken
+            );
+        });
+
+        it('returns the same 200 for an unknown email, without sending anything', async () => {
+            const callsBefore = email.sendPasswordResetEmail.mock.calls.length;
+
+            const response = await request(app)
+                .post('/users/reset/request')
+                .send({ email: 'unknown@example.com' });
+
+            expect(response.status).toBe(200);
+            expect(response.body).toEqual({
+                message: 'Password reset email sent',
+            });
+            expect(email.sendPasswordResetEmail.mock.calls.length).toBe(
+                callsBefore
+            );
+        });
+
+        it('rejects a missing email', async () => {
+            const response = await request(app)
+                .post('/users/reset/request')
+                .send({});
+
+            expect(response.status).toBe(400);
+        });
+    });
+
+    describe('POST /users/reset/confirm', () => {
+        it('resets the password, invalidates the old token, and allows login with the new password', async () => {
+            const signupResponse = await request(app)
+                .post('/users/signup')
+                .send({
+                    email: 'jane@example.com',
+                    password: 'secret123',
+                    username: 'jane',
+                });
+            await activateUser('jane@example.com');
+            const oldToken = signupResponse.body.token;
+
+            await request(app)
+                .post('/users/reset/request')
+                .send({ email: 'jane@example.com' });
+            const user = await User.findOne({ email: 'jane@example.com' });
+
+            const response = await request(app)
+                .post('/users/reset/confirm')
+                .send({ token: user.resetToken, password: 'newSecret456' });
+
+            expect(response.status).toBe(200);
+
+            const updatedUser = await User.findById(user._id);
+            expect(updatedUser.resetToken).toBeNull();
+            expect(updatedUser.resetTokenExpiresAt).toBeNull();
+
+            const oldLogin = await request(app).post('/users/login').send({
+                email: 'jane@example.com',
+                password: 'secret123',
+            });
+            expect(oldLogin.status).toBe(403);
+
+            const newLogin = await request(app).post('/users/login').send({
+                email: 'jane@example.com',
+                password: 'newSecret456',
+            });
+            expect(newLogin.status).toBe(200);
+
+            const authedWithOldToken = await request(app)
+                .patch(`/users/${user._id}`)
+                .set('Authorization', `Bearer ${oldToken}`)
+                .field('username', 'stillJane');
+            expect(authedWithOldToken.status).toBe(401);
+        });
+
+        it('clears a stale lockout on a successful reset', async () => {
+            await signupAndActivate();
+            const user = await User.findOne({ email: 'jane@example.com' });
+            await User.findByIdAndUpdate(user._id, {
+                failedLoginAttempts: MAX_LOGIN_ATTEMPTS,
+                lockUntil: new Date(Date.now() + 60 * 1000),
+            });
+
+            await request(app)
+                .post('/users/reset/request')
+                .send({ email: 'jane@example.com' });
+            const withToken = await User.findById(user._id);
+
+            await request(app).post('/users/reset/confirm').send({
+                token: withToken.resetToken,
+                password: 'newSecret456',
+            });
+
+            const login = await request(app).post('/users/login').send({
+                email: 'jane@example.com',
+                password: 'newSecret456',
+            });
+            expect(login.status).toBe(200);
+        });
+
+        it('rejects an unknown token', async () => {
+            const response = await request(app)
+                .post('/users/reset/confirm')
+                .send({ token: 'not-a-real-token', password: 'newSecret456' });
+
+            expect(response.status).toBe(400);
+        });
+
+        it('rejects an expired token', async () => {
+            await signupAndActivate();
+            await request(app)
+                .post('/users/reset/request')
+                .send({ email: 'jane@example.com' });
+            const user = await User.findOne({ email: 'jane@example.com' });
+            await User.findByIdAndUpdate(user._id, {
+                resetTokenExpiresAt: new Date(Date.now() - 1000),
+            });
+
+            const response = await request(app)
+                .post('/users/reset/confirm')
+                .send({ token: user.resetToken, password: 'newSecret456' });
+
+            expect(response.status).toBe(400);
+        });
+
+        it('rejects a short password', async () => {
+            await signupAndActivate();
+            await request(app)
+                .post('/users/reset/request')
+                .send({ email: 'jane@example.com' });
+            const user = await User.findOne({ email: 'jane@example.com' });
+
+            const response = await request(app)
+                .post('/users/reset/confirm')
+                .send({ token: user.resetToken, password: 'short' });
+
+            expect(response.status).toBe(400);
+        });
     });
 });
 

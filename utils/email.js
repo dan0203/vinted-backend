@@ -49,4 +49,32 @@ async function sendNewsletterWelcomeEmail(to) {
     }
 }
 
-module.exports = { sendConfirmationEmail, sendNewsletterWelcomeEmail };
+// No clickable link here (unlike sendConfirmationEmail): confirming a reset
+// requires POSTing a new password alongside the token, which a mail client
+// can't do on its own, so the raw token is what the caller's client needs.
+async function sendPasswordResetEmail(to, token) {
+    if (!process.env.EMAIL_FROM) {
+        console.error(
+            'Failed sending password reset email: EMAIL_FROM is not configured'
+        );
+        return;
+    }
+
+    try {
+        const resend = new Resend(process.env.RESEND_API_KEY);
+        await resend.emails.send({
+            from: process.env.EMAIL_FROM,
+            to,
+            subject: 'Reset your Vinted password',
+            html: `<p>Use the code below to reset your password. It expires in 1 hour.</p><p>${token}</p>`,
+        });
+    } catch (error) {
+        console.error(`Failed sending password reset email: ${error.message}`);
+    }
+}
+
+module.exports = {
+    sendConfirmationEmail,
+    sendNewsletterWelcomeEmail,
+    sendPasswordResetEmail,
+};

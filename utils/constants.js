@@ -11,6 +11,7 @@ const MAX_TOKEN_AGE_MS = 30 * 24 * 60 * 60 * 1000;
 const MAX_LOGIN_ATTEMPTS = 5;
 const ACCOUNT_LOCK_MS = 15 * 60 * 1000;
 const CONFIRMATION_TOKEN_TTL_MS = 24 * 60 * 60 * 1000;
+const RESET_TOKEN_TTL_MS = 60 * 60 * 1000;
 
 module.exports = {
     MIN_PRICE,
@@ -26,4 +27,5 @@ module.exports = {
     MAX_LOGIN_ATTEMPTS,
     ACCOUNT_LOCK_MS,
     CONFIRMATION_TOKEN_TTL_MS,
+    RESET_TOKEN_TTL_MS,
 };

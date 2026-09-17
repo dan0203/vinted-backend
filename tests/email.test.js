@@ -9,6 +9,7 @@ jest.mock('resend', () => ({
 const {
     sendConfirmationEmail,
     sendNewsletterWelcomeEmail,
+    sendPasswordResetEmail,
 } = require('../utils/email');
 
 const originalBackendUrl = process.env.BACKEND_URL;
@@ -73,7 +74,32 @@ describe('utils/email', () => {
 
         await sendConfirmationEmail('jane@example.com', 'sometoken');
         await sendNewsletterWelcomeEmail('jane@example.com');
+        await sendPasswordResetEmail('jane@example.com', 'sometoken');
 
         expect(mockSend).not.toHaveBeenCalled();
+    });
+
+    it('swallows a rejected sendPasswordResetEmail call instead of throwing', async () => {
+        mockSend.mockRejectedValueOnce(new Error('Resend is down'));
+
+        await expect(
+            sendPasswordResetEmail('jane@example.com', 'sometoken')
+        ).resolves.toBeUndefined();
+        expect(mockSend).toHaveBeenCalledTimes(1);
+    });
+
+    it('sends the password reset email with the from address and reset token', async () => {
+        mockSend.mockResolvedValueOnce({});
+
+        await sendPasswordResetEmail('jane@example.com', 'sometoken');
+
+        expect(mockSend).toHaveBeenCalledWith(
+            expect.objectContaining({
+                from: 'noreply@example.com',
+                to: 'jane@example.com',
+                subject: 'Reset your Vinted password',
+                html: expect.stringContaining('sometoken'),
+            })
+        );
     });
 });
