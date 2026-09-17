@@ -25,6 +25,15 @@ const userSchema = new Schema({
     },
 });
 
+// Speeds up POST /users/refresh, which looks up the presented cookie value
+userSchema.index({ refreshToken: 1 });
+
+// Speeds up GET /users/confirm/:token
+userSchema.index({ confirmationToken: 1 });
+
+// Speeds up POST /users/reset/confirm
+userSchema.index({ resetToken: 1 });
+
 const User = mongoose.model('User', userSchema);
 
 module.exports = User;
