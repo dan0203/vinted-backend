@@ -26,6 +26,11 @@ const offerSchema = new Schema({
         type: imageSchema,
         default: {},
     },
+    status: {
+        type: String,
+        enum: ['available', 'reserved', 'sold'],
+        default: 'available',
+    },
     createdAt: {
         type: Date,
         default: Date.now,

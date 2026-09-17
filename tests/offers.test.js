@@ -8,6 +8,7 @@ const {
 } = require('./setupTestDb');
 const cloudinary = require('../utils/cloudinary');
 const mongooseOrThrow = require('../utils/mongooseOrThrow');
+const Offer = require('../models/Offer');
 
 // Mocks the Resend wrapper so signup here never hits the real network,
 // mirroring tests/user.test.js.
@@ -124,6 +125,7 @@ describe('POST /offers/publish', () => {
         expect(response.status).toBe(201);
         expect(response.body.name).toBe('Vintage jacket');
         expect(response.body.price).toBe(25);
+        expect(response.body.status).toBe('available');
         expect(response.body.owner.account.username).toBe('seller');
     });
 
@@ -304,6 +306,22 @@ describe('GET /offers', () => {
         expect(response.body.count).toBe(0);
         expect(response.body.totalPages).toBe(0);
     });
+
+    it('excludes sold offers by default, but still returns them by id', async () => {
+        const listResponse = await request(app).get('/offers');
+        const offerId = listResponse.body.offers[0]._id;
+        await Offer.findByIdAndUpdate(offerId, { status: 'sold' });
+
+        const response = await request(app).get('/offers');
+
+        expect(response.status).toBe(200);
+        expect(response.body.count).toBe(0);
+        expect(response.body.offers).toHaveLength(0);
+
+        const singleResponse = await request(app).get(`/offers/${offerId}`);
+        expect(singleResponse.status).toBe(200);
+        expect(singleResponse.body.status).toBe('sold');
+    });
 });
 
 describe('GET /offers/:id', () => {
@@ -424,7 +442,9 @@ describe('PUT /offers/:id', () => {
         expect(response.status).toBe(400);
     });
 
-    it('fully replaces the offer', async () => {
+    it('fully replaces the offer, leaving its status untouched', async () => {
+        await Offer.findByIdAndUpdate(offerId, { status: 'reserved' });
+
         const response = await attachPicture(
             request(app)
                 .put(`/offers/${offerId}`)
@@ -442,6 +462,7 @@ describe('PUT /offers/:id', () => {
         expect(response.status).toBe(200);
         expect(response.body.name).toBe('Updated jacket');
         expect(response.body.price).toBe(40);
+        expect(response.body.status).toBe('reserved');
 
         const { details } = response.body;
         expect(details.brand).toBe('Nike');
@@ -576,6 +597,25 @@ describe('PATCH /offers/:id', () => {
         expect(response.status).toBe(200);
         expect(response.body.price).toBe(30);
         expect(response.body.name).toBe('Vintage jacket');
+    });
+
+    it('updates the status to a valid value', async () => {
+        const response = await request(app)
+            .patch(`/offers/${offerId}`)
+            .set('Authorization', `Bearer ${token}`)
+            .field('status', 'sold');
+
+        expect(response.status).toBe(200);
+        expect(response.body.status).toBe('sold');
+    });
+
+    it('rejects an invalid status value', async () => {
+        const response = await request(app)
+            .patch(`/offers/${offerId}`)
+            .set('Authorization', `Bearer ${token}`)
+            .field('status', 'not-a-status');
+
+        expect(response.status).toBe(400);
     });
 
     it('merges a single details field instead of replacing the whole object', async () => {

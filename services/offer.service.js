@@ -53,6 +53,7 @@ const offerBodyPartialSchema = Joi.object({
     brand: Joi.string().trim().min(1),
     size: Joi.string().trim().min(1),
     color: Joi.string().trim().min(1),
+    status: Joi.string().valid('available', 'reserved', 'sold'),
 });
 
 const getAllQuerySchema = Joi.object({
@@ -133,6 +134,7 @@ function toOfferDTO(offer) {
         details: offer.details,
         pictures: offer.pictures,
         image: offer.image,
+        status: offer.status,
         createdAt: offer.createdAt,
         owner: offer.owner,
     };
@@ -277,6 +279,8 @@ const updatePartial = async (data) => {
         if (data.body.description !== undefined)
             updateFields.description = data.body.description;
         if (data.body.price !== undefined) updateFields.price = data.body.price;
+        if (data.body.status !== undefined)
+            updateFields.status = data.body.status;
 
         const details = mergeDetails(offerToUpdate.details, data.body);
         if (details !== undefined) {
@@ -357,7 +361,9 @@ const remove = async (data) => {
 const getAll = async (data) => {
     const query = assertValid(getAllQuerySchema, data.query);
 
-    const filters = {};
+    // Sold offers never appear in the public listing (locked contract, see
+    // project-overview.md): no query param currently overrides this.
+    const filters = { status: { $ne: 'sold' } };
 
     // title filter
     if (query.title) {
