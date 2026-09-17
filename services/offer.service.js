@@ -23,7 +23,6 @@ const {
 } = require('../utils/constants');
 const {
     findByIdOrThrow,
-    findByIdAndUpdateOrThrow,
     findAll,
     findOneOrThrow,
     findOneAndUpdateOrThrow,
@@ -325,9 +324,9 @@ const updatePartial = async (data) => {
     }
 
     const updatedOffer = await withImageRollback(uploadedImages, () =>
-        findByIdAndUpdateOrThrow(
+        findOneAndUpdateOrThrow(
             Offer,
-            data.params.id,
+            { _id: data.params.id, owner: data.user._id },
             OFFER,
             updateFields,
             partialUpdateOptions,

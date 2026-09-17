@@ -716,7 +716,7 @@ describe('PATCH /offers/:id', () => {
     });
 
     it('rolls back all newly uploaded images when the update write fails', async () => {
-        mongooseOrThrow.findByIdAndUpdateOrThrow.mockRejectedValueOnce(
+        mongooseOrThrow.findOneAndUpdateOrThrow.mockRejectedValueOnce(
             new Error('db failed')
         );
         const removeImageCallsBefore = cloudinary.removeImage.mock.calls.length;
