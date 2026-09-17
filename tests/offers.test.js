@@ -821,3 +821,14 @@ describe('DELETE /offers/:id', () => {
         );
     });
 });
+
+describe('Offer indexes', () => {
+    // GET /offers always filters on status and sorts by price, so both fields
+    // need an explicit index instead of relying on the default _id one.
+    it('has explicit indexes on price and status', async () => {
+        const indexes = await Offer.collection.getIndexes();
+
+        expect(indexes).toHaveProperty('price_1');
+        expect(indexes).toHaveProperty('status_1');
+    });
+});

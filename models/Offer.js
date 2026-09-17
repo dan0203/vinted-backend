@@ -40,6 +40,9 @@ const offerSchema = new Schema({
 // Speeds up GET /offers, which always sorts by price (see FIELD_SORT_OPTIONS)
 offerSchema.index({ price: 1 });
 
+// Speeds up GET /offers, which always filters out sold offers
+offerSchema.index({ status: 1 });
+
 const Offer = mongoose.model('Offer', offerSchema);
 
 module.exports = Offer;
