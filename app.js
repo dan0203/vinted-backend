@@ -18,7 +18,11 @@ cloudinary.config({
 const app = express();
 app.use(helmet());
 app.disable('x-powered-by');
-app.use(cors({ origin: process.env.FRONTEND_URL, credentials: true }));
+// `cors` treats a falsy `origin` as "allow any origin" (wildcard), which would
+// silently defeat this restriction if FRONTEND_URL is ever unset - an empty
+// array denies every origin instead, matching the documented "restricted to
+// FRONTEND_URL" contract even when misconfigured.
+app.use(cors({ origin: process.env.FRONTEND_URL || [], credentials: true }));
 app.use(express.json({ limit: '10kb' }));
 app.use(cookieParser());
 app.use(sanitizeMongo);
