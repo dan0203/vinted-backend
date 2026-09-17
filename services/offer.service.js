@@ -1,6 +1,7 @@
 const mongoose = require('mongoose');
 const Joi = require('joi');
 const Offer = require('../models/Offer');
+const User = require('../models/User');
 const throwError = require('../utils/throwError');
 const escapeRegex = require('../utils/escapeRegex');
 const { uploadImage, uploadImages } = require('../utils/cloudinary');
@@ -153,6 +154,21 @@ async function cleanupOfferImages(offer) {
         `vinted/offers/${offer._id}`,
         'Failed deleting offer folder'
     );
+}
+
+// Non-blocking log, mirrors safeRemoveImage/safeDeleteFolder in
+// utils/cloudinaryCleanup.js: a successful offer deletion must never fail
+// because this best-effort cascade fails, and a dangling favorite is far
+// less costly than skipping the Cloudinary cleanup that follows it.
+async function safeRemoveFavorites(offerIds) {
+    try {
+        await User.updateMany(
+            { favorites: { $in: offerIds } },
+            { $pull: { favorites: { $in: offerIds } } }
+        );
+    } catch (error) {
+        console.error('Failed removing offer from favorites', error.message);
+    }
 }
 
 function assertPictureCountWithinLimit(files) {
@@ -353,6 +369,7 @@ const remove = async (data) => {
         populate
     );
 
+    await safeRemoveFavorites([removedOffer._id]);
     await cleanupOfferImages(removedOffer);
 
     return toOfferDTO(removedOffer);
@@ -417,13 +434,17 @@ const getOne = async (data) => {
 
 // Cascade used by user account deletion (issue #1): deletes all of an
 // owner's offers, with the same Cloudinary cleanup as remove(). Mongo
-// request errors propagate (they must fail the caller); only the
-// Cloudinary cleanup stays non-blocking, via cleanupOfferImages().
+// request errors propagate (they must fail the caller); only the favorites
+// cascade and the Cloudinary cleanup stay non-blocking, via
+// safeRemoveFavorites() and cleanupOfferImages().
 const removeAllByOwner = async (ownerId) => {
     const offers = await Offer.find({ owner: ownerId });
     if (offers.length === 0) return;
 
+    const offerIds = offers.map((offer) => offer._id);
+
     await Offer.deleteMany({ owner: ownerId });
+    await safeRemoveFavorites(offerIds);
     await Promise.all(offers.map(cleanupOfferImages));
 };
 
@@ -435,4 +456,5 @@ module.exports = {
     remove,
     getOne,
     removeAllByOwner,
+    toOfferDTO,
 };

@@ -92,6 +92,36 @@ const remove = async (req, res, next) => {
     }
 };
 
+const addFavorite = async (req, res, next) => {
+    try {
+        const result = await userService.addFavorite(buildData(req));
+
+        return res.status(200).json(result);
+    } catch (error) {
+        next(error);
+    }
+};
+
+const removeFavorite = async (req, res, next) => {
+    try {
+        const result = await userService.removeFavorite(buildData(req));
+
+        return res.status(200).json(result);
+    } catch (error) {
+        next(error);
+    }
+};
+
+const getFavorites = async (req, res, next) => {
+    try {
+        const result = await userService.getFavorites(buildData(req));
+
+        return res.status(200).json(result);
+    } catch (error) {
+        next(error);
+    }
+};
+
 module.exports = {
     signup,
     login,
@@ -101,4 +131,7 @@ module.exports = {
     update,
     updatePartial,
     remove,
+    addFavorite,
+    removeFavorite,
+    getFavorites,
 };

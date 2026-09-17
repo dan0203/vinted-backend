@@ -2,6 +2,7 @@ const Joi = require('joi');
 const bcrypt = require('bcryptjs');
 const uid2 = require('uid2');
 const User = require('../models/User');
+const Offer = require('../models/Offer');
 const offerService = require('./offer.service');
 const throwError = require('../utils/throwError');
 const assertValidObjectId = require('../utils/assertValidObjectId');
@@ -22,6 +23,7 @@ const {
 } = require('../utils/email');
 const {
     USER,
+    OFFER,
     MAX_LOGIN_ATTEMPTS,
     ACCOUNT_LOCK_MS,
     CONFIRMATION_TOKEN_TTL_MS,
@@ -68,6 +70,14 @@ const userBodyPartialSchema = Joi.object({
 });
 
 const updateOptions = { returnDocument: 'after', runValidators: true };
+
+const favoritesPopulate = {
+    path: 'favorites',
+    populate: {
+        path: 'owner',
+        select: '_id account',
+    },
+};
 
 // Validates `value` against `schema` and returns the validated version (with
 // Joi's type conversions, e.g. trim), or throws a 400.
@@ -338,6 +348,61 @@ const remove = async (data) => {
     return toUserDTO(removedUser);
 };
 
+// Adds an offer to the caller's own favorites. $addToSet keeps this
+// idempotent: favoriting an already-favorited offer is a no-op.
+const addFavorite = async (data) => {
+    assertIsSelf(data.params.id, data.user);
+    assertValidObjectId(data.params.offerId, OFFER);
+
+    await findByIdOrThrow(Offer, data.params.offerId, OFFER);
+
+    const updatedUser = await findByIdAndUpdateOrThrow(
+        User,
+        data.params.id,
+        USER,
+        { $addToSet: { favorites: data.params.offerId } },
+        updateOptions
+    );
+
+    return { favorites: updatedUser.favorites };
+};
+
+// Removes an offer from the caller's own favorites. $pull keeps this
+// idempotent: removing a non-favorited offer is a no-op, not an error, so
+// unlike addFavorite() there's no existence check on the offer id.
+const removeFavorite = async (data) => {
+    assertIsSelf(data.params.id, data.user);
+    assertValidObjectId(data.params.offerId, OFFER);
+
+    const updatedUser = await findByIdAndUpdateOrThrow(
+        User,
+        data.params.id,
+        USER,
+        { $pull: { favorites: data.params.offerId } },
+        updateOptions
+    );
+
+    return { favorites: updatedUser.favorites };
+};
+
+const getFavorites = async (data) => {
+    assertIsSelf(data.params.id, data.user);
+
+    const user = await findByIdOrThrow(
+        User,
+        data.params.id,
+        USER,
+        favoritesPopulate
+    );
+
+    // populate() leaves null for a favorited offer that no longer exists
+    // (e.g. deleted through a path that bypasses offer.service.js's
+    // favorites cascade); filter it out instead of crashing the whole list.
+    return {
+        favorites: user.favorites.filter(Boolean).map(offerService.toOfferDTO),
+    };
+};
+
 module.exports = {
     signup,
     login,
@@ -347,4 +412,7 @@ module.exports = {
     update,
     updatePartial,
     remove,
+    addFavorite,
+    removeFavorite,
+    getFavorites,
 };

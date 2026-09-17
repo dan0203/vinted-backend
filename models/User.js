@@ -17,6 +17,10 @@ const userSchema = new Schema({
     active: { type: Boolean, required: true, default: false },
     confirmationToken: { type: String, default: null },
     confirmationTokenExpiresAt: { type: Date, default: null },
+    favorites: {
+        type: [{ type: Schema.Types.ObjectId, ref: 'Offer' }],
+        default: [],
+    },
 });
 
 const User = mongoose.model('User', userSchema);

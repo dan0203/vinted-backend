@@ -9,6 +9,7 @@ const {
 const cloudinary = require('../utils/cloudinary');
 const email = require('../utils/email');
 const User = require('../models/User');
+const Offer = require('../models/Offer');
 const { MAX_TOKEN_AGE_MS, MAX_LOGIN_ATTEMPTS } = require('../utils/constants');
 
 // Mocks the Resend wrapper for signup/confirm/resend so no real network
@@ -600,5 +601,270 @@ describe('DELETE /users/:id', () => {
 
         const offers = await request(app).get('/offers');
         expect(offers.body.count).toBe(0);
+    });
+
+    it("removes a deleted offer from another user's favorites", async () => {
+        const otherSignup = await request(app).post('/users/signup').send({
+            email: 'other@example.com',
+            password: 'secret123',
+            username: 'other',
+        });
+        await activateUser('other@example.com');
+        const otherId = otherSignup.body._id;
+        const otherToken = otherSignup.body.token;
+
+        const publishResponse = await request(app)
+            .post('/offers/publish')
+            .set('Authorization', `Bearer ${token}`)
+            .field('title', 'Vintage jacket')
+            .field('description', 'Good condition')
+            .field('price', '25')
+            .field('brand', "Levi's")
+            .field('size', 'M')
+            .field('color', 'Blue')
+            .field('condition', 'Good')
+            .field('city', 'Paris')
+            .attach('picture', Buffer.from('fake-image'), 'picture.jpg');
+        const offerId = publishResponse.body._id;
+
+        await request(app)
+            .post(`/users/${otherId}/favorites/${offerId}`)
+            .set('Authorization', `Bearer ${otherToken}`);
+
+        await request(app)
+            .delete(`/offers/${offerId}`)
+            .set('Authorization', `Bearer ${token}`);
+
+        const favorites = await request(app)
+            .get(`/users/${otherId}/favorites`)
+            .set('Authorization', `Bearer ${otherToken}`);
+
+        expect(favorites.body.favorites).toHaveLength(0);
+    });
+});
+
+describe('favorites', () => {
+    let userId;
+    let token;
+    let otherId;
+    let otherToken;
+    let offerId;
+
+    beforeEach(async () => {
+        const signupResponse = await request(app).post('/users/signup').send({
+            email: 'jane@example.com',
+            password: 'secret123',
+            username: 'jane',
+        });
+        userId = signupResponse.body._id;
+        token = signupResponse.body.token;
+        await activateUser('jane@example.com');
+
+        const otherSignup = await request(app).post('/users/signup').send({
+            email: 'other@example.com',
+            password: 'secret123',
+            username: 'other',
+        });
+        otherId = otherSignup.body._id;
+        otherToken = otherSignup.body.token;
+        await activateUser('other@example.com');
+
+        const publishResponse = await request(app)
+            .post('/offers/publish')
+            .set('Authorization', `Bearer ${token}`)
+            .field('title', 'Vintage jacket')
+            .field('description', 'Good condition')
+            .field('price', '25')
+            .field('brand', "Levi's")
+            .field('size', 'M')
+            .field('color', 'Blue')
+            .field('condition', 'Good')
+            .field('city', 'Paris')
+            .attach('picture', Buffer.from('fake-image'), 'picture.jpg');
+        offerId = publishResponse.body._id;
+    });
+
+    describe('POST /users/:id/favorites/:offerId', () => {
+        it('requires authentication', async () => {
+            const response = await request(app).post(
+                `/users/${userId}/favorites/${offerId}`
+            );
+
+            expect(response.status).toBe(401);
+        });
+
+        it('returns 403 when the id is not the authenticated user', async () => {
+            const response = await request(app)
+                .post(`/users/${userId}/favorites/${offerId}`)
+                .set('Authorization', `Bearer ${otherToken}`);
+
+            expect(response.status).toBe(403);
+        });
+
+        it("adds the offer to the caller's favorites", async () => {
+            const response = await request(app)
+                .post(`/users/${userId}/favorites/${offerId}`)
+                .set('Authorization', `Bearer ${token}`);
+
+            expect(response.status).toBe(200);
+            expect(response.body.favorites).toContain(offerId);
+        });
+
+        it('is a no-op when the offer is already favorited', async () => {
+            await request(app)
+                .post(`/users/${userId}/favorites/${offerId}`)
+                .set('Authorization', `Bearer ${token}`);
+
+            const response = await request(app)
+                .post(`/users/${userId}/favorites/${offerId}`)
+                .set('Authorization', `Bearer ${token}`);
+
+            expect(response.status).toBe(200);
+            expect(response.body.favorites).toHaveLength(1);
+        });
+
+        it('returns 404 for a non-existent offer', async () => {
+            const response = await request(app)
+                .post(`/users/${userId}/favorites/507f1f77bcf86cd799439011`)
+                .set('Authorization', `Bearer ${token}`);
+
+            expect(response.status).toBe(404);
+        });
+
+        it('rejects a malformed offer id', async () => {
+            const response = await request(app)
+                .post(`/users/${userId}/favorites/not-a-valid-id`)
+                .set('Authorization', `Bearer ${token}`);
+
+            expect(response.status).toBe(400);
+        });
+    });
+
+    describe('DELETE /users/:id/favorites/:offerId', () => {
+        it('requires authentication', async () => {
+            const response = await request(app).delete(
+                `/users/${userId}/favorites/${offerId}`
+            );
+
+            expect(response.status).toBe(401);
+        });
+
+        it('returns 403 when the id is not the authenticated user', async () => {
+            const response = await request(app)
+                .delete(`/users/${userId}/favorites/${offerId}`)
+                .set('Authorization', `Bearer ${otherToken}`);
+
+            expect(response.status).toBe(403);
+        });
+
+        it('removes a favorited offer', async () => {
+            await request(app)
+                .post(`/users/${userId}/favorites/${offerId}`)
+                .set('Authorization', `Bearer ${token}`);
+
+            const response = await request(app)
+                .delete(`/users/${userId}/favorites/${offerId}`)
+                .set('Authorization', `Bearer ${token}`);
+
+            expect(response.status).toBe(200);
+            expect(response.body.favorites).toHaveLength(0);
+        });
+
+        it('is a no-op when the offer was never favorited', async () => {
+            const response = await request(app)
+                .delete(`/users/${userId}/favorites/${offerId}`)
+                .set('Authorization', `Bearer ${token}`);
+
+            expect(response.status).toBe(200);
+            expect(response.body.favorites).toHaveLength(0);
+        });
+    });
+
+    describe('GET /users/:id/favorites', () => {
+        it('requires authentication', async () => {
+            const response = await request(app).get(
+                `/users/${userId}/favorites`
+            );
+
+            expect(response.status).toBe(401);
+        });
+
+        it('returns 403 when the id is not the authenticated user', async () => {
+            const response = await request(app)
+                .get(`/users/${userId}/favorites`)
+                .set('Authorization', `Bearer ${otherToken}`);
+
+            expect(response.status).toBe(403);
+        });
+
+        it("returns the caller's favorited offers in the offer DTO shape", async () => {
+            await request(app)
+                .post(`/users/${userId}/favorites/${offerId}`)
+                .set('Authorization', `Bearer ${token}`);
+
+            const response = await request(app)
+                .get(`/users/${userId}/favorites`)
+                .set('Authorization', `Bearer ${token}`);
+
+            expect(response.status).toBe(200);
+            expect(response.body.favorites).toHaveLength(1);
+            expect(response.body.favorites[0]._id).toBe(offerId);
+            expect(response.body.favorites[0].name).toBe('Vintage jacket');
+            expect(response.body.favorites[0].owner.account.username).toBe(
+                'jane'
+            );
+        });
+
+        it('excludes offers favorited by other users', async () => {
+            await request(app)
+                .post(`/users/${otherId}/favorites/${offerId}`)
+                .set('Authorization', `Bearer ${otherToken}`);
+
+            const response = await request(app)
+                .get(`/users/${userId}/favorites`)
+                .set('Authorization', `Bearer ${token}`);
+
+            expect(response.status).toBe(200);
+            expect(response.body.favorites).toHaveLength(0);
+        });
+
+        it('omits a favorite whose offer no longer exists instead of crashing', async () => {
+            await request(app)
+                .post(`/users/${otherId}/favorites/${offerId}`)
+                .set('Authorization', `Bearer ${otherToken}`);
+
+            // Simulates a dangling reference by deleting the offer directly,
+            // bypassing offer.service.js's favorites cascade.
+            await Offer.findByIdAndDelete(offerId);
+
+            const response = await request(app)
+                .get(`/users/${otherId}/favorites`)
+                .set('Authorization', `Bearer ${otherToken}`);
+
+            expect(response.status).toBe(200);
+            expect(response.body.favorites).toHaveLength(0);
+        });
+    });
+
+    it('still deletes the offer and cleans up its images if the favorites cascade fails', async () => {
+        await request(app)
+            .post(`/users/${otherId}/favorites/${offerId}`)
+            .set('Authorization', `Bearer ${otherToken}`);
+
+        const updateManySpy = jest
+            .spyOn(User, 'updateMany')
+            .mockRejectedValueOnce(new Error('db failed'));
+        const removeImageCallsBefore = cloudinary.removeImage.mock.calls.length;
+
+        const response = await request(app)
+            .delete(`/offers/${offerId}`)
+            .set('Authorization', `Bearer ${token}`);
+
+        expect(response.status).toBe(200);
+        expect(cloudinary.removeImage.mock.calls.length).toBeGreaterThan(
+            removeImageCallsBefore
+        );
+
+        updateManySpy.mockRestore();
     });
 });

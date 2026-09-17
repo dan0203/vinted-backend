@@ -20,5 +20,16 @@ router.get('/:id', userController.getOne);
 router.put('/:id', isAuthenticated, upload, userController.update);
 router.patch('/:id', isAuthenticated, upload, userController.updatePartial);
 router.delete('/:id', isAuthenticated, userController.remove);
+router.get('/:id/favorites', isAuthenticated, userController.getFavorites);
+router.post(
+    '/:id/favorites/:offerId',
+    isAuthenticated,
+    userController.addFavorite
+);
+router.delete(
+    '/:id/favorites/:offerId',
+    isAuthenticated,
+    userController.removeFavorite
+);
 
 module.exports = router;
