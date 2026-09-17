@@ -1,7 +1,7 @@
 {
     "name": "api-vinted",
     "version": "1.0.0",
-    "description": "",
+    "description": "RESTful backend API for a Vinted-inspired second-hand clothing marketplace.",
     "main": "index.js",
     "scripts": {
         "test": "jest",
@@ -11,9 +11,14 @@
         "format": "prettier --write .",
         "format:check": "prettier --check ."
     },
-    "keywords": [],
-    "author": "",
-    "license": "ISC",
+    "keywords": [
+        "express",
+        "mongodb",
+        "rest-api",
+        "vinted"
+    ],
+    "author": "Dan Zerbib",
+    "license": "MIT",
     "type": "commonjs",
     "dependencies": {
         "bcryptjs": "^3.0.3",
