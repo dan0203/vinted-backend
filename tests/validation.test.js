@@ -35,6 +35,20 @@ describe('sanitizeMongo', () => {
         expect(() => sanitizeMongo(req, {}, next)).not.toThrow();
         expect(next).toHaveBeenCalledTimes(1);
     });
+
+    it('strips dangerous keys from objects nested inside arrays', () => {
+        const req = {
+            body: {
+                pictures: [{ safe: 'ok', $where: 'evil' }, { 'a.b': 'x' }],
+            },
+        };
+        const next = jest.fn();
+
+        sanitizeMongo(req, {}, next);
+
+        expect(req.body).toEqual({ pictures: [{ safe: 'ok' }, {}] });
+        expect(next).toHaveBeenCalledTimes(1);
+    });
 });
 
 describe('validation without a database connection', () => {
