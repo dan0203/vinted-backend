@@ -1,0 +1,4 @@
+# Every text file is stored and checked out with LF. Without this, a Windows
+# clone with core.autocrlf=true expects CRLF in the working tree and reports
+# every LF file as modified, which buries real changes in the noise.
+* text=auto eol=lf
