@@ -12,7 +12,12 @@ const User = require('../models/User');
 const Offer = require('../models/Offer');
 const jwt = require('jsonwebtoken');
 const mongoose = require('mongoose');
-const { MAX_LOGIN_ATTEMPTS, MAX_FAVORITES } = require('../utils/constants');
+const {
+    MAX_LOGIN_ATTEMPTS,
+    MAX_FAVORITES,
+    REFRESH_TOKEN_TTL_MS,
+    REFRESH_ROTATION_THRESHOLD_MS,
+} = require('../utils/constants');
 
 // Mocks the Resend wrapper for signup/confirm/resend so no real network
 // call is made and tests can assert on which emails were sent.
@@ -80,6 +85,11 @@ describe('POST /users/signup', () => {
         // NODE_ENV is 'test' here, not 'production', so Secure is correctly
         // absent - see refreshCookieOptions() in user.controller.js.
         expect(setCookie).not.toMatch(/Secure/);
+        // Signup always mints a fresh token, so the expiry-derived Max-Age is
+        // the full lifetime give or take the milliseconds spent in the request.
+        const maxAge = Number(/Max-Age=(\d+)/i.exec(setCookie)[1]);
+        expect(maxAge).toBeGreaterThan(REFRESH_TOKEN_TTL_MS / 1000 - 10);
+        expect(maxAge).toBeLessThanOrEqual(REFRESH_TOKEN_TTL_MS / 1000);
     });
 
     // This test never touches the DB: Joi rejects the request before any Mongo access
@@ -143,6 +153,20 @@ describe('POST /users/login', () => {
 
         expect(response.status).toBe(200);
         expect(response.body).toHaveProperty('accessToken');
+    });
+
+    it('sets a full-lifetime refresh cookie', async () => {
+        const response = await request(app).post('/users/login').send({
+            email: 'jane@example.com',
+            password: 'secret123',
+        });
+
+        // Login always mints a fresh refresh token, so the expiry-derived
+        // Max-Age must be the whole TTL give or take the request duration.
+        const setCookie = response.headers['set-cookie'][0];
+        const maxAge = Number(/Max-Age=(\d+)/i.exec(setCookie)[1]);
+        expect(maxAge).toBeGreaterThan(REFRESH_TOKEN_TTL_MS / 1000 - 10);
+        expect(maxAge).toBeLessThanOrEqual(REFRESH_TOKEN_TTL_MS / 1000);
     });
 
     it('rejects a wrong password', async () => {
@@ -797,7 +821,20 @@ describe('POST /users/refresh', () => {
     const cookieHeader = (response) => response.headers['set-cookie'][0];
     const cookieValue = (setCookieHeader) => setCookieHeader.split(';')[0];
 
-    it('returns a new access token and rotates the refresh cookie', async () => {
+    // Pushes the stored expiry back so the token reads as older than
+    // REFRESH_ROTATION_THRESHOLD_MS, using the same seam as the expired-token
+    // test below. A token issued during the test is always below the threshold.
+    const ageTokenPastThreshold = (userId) =>
+        User.findByIdAndUpdate(userId, {
+            refreshTokenExpiresAt: new Date(
+                Date.now() +
+                    REFRESH_TOKEN_TTL_MS -
+                    REFRESH_ROTATION_THRESHOLD_MS -
+                    1000
+            ),
+        });
+
+    it('returns a new access token and keeps the refresh cookie while it is young', async () => {
         const signupResponse = await signupAndActivate();
         const refreshCookie = cookieValue(cookieHeader(signupResponse));
 
@@ -808,10 +845,66 @@ describe('POST /users/refresh', () => {
         expect(response.status).toBe(200);
         expect(typeof response.body.accessToken).toBe('string');
         expect(response.body.accessToken.length).toBeGreaterThan(0);
-        // The rotated refresh token is a fresh random value even when the
-        // JWT access token happens to be byte-identical (same sub/iat/exp
-        // within the same second is expected, not a bug).
+        // Seconds old, so far below the rotation threshold: the same value
+        // comes back, which is what lets concurrent tabs agree on one cookie.
+        expect(cookieValue(cookieHeader(response))).toBe(refreshCookie);
+    });
+
+    it('leaves the stored refresh token untouched when it is not rotated', async () => {
+        const signupResponse = await signupAndActivate();
+        const refreshCookie = cookieValue(cookieHeader(signupResponse));
+        const before = await User.findById(signupResponse.body._id);
+
+        await request(app).post('/users/refresh').set('Cookie', refreshCookie);
+
+        const after = await User.findById(signupResponse.body._id);
+        expect(after.refreshToken).toBe(before.refreshToken);
+        expect(after.refreshTokenExpiresAt.getTime()).toBe(
+            before.refreshTokenExpiresAt.getTime()
+        );
+    });
+
+    it('rotates the refresh cookie once the token has aged past the threshold', async () => {
+        const signupResponse = await signupAndActivate();
+        const refreshCookie = cookieValue(cookieHeader(signupResponse));
+        await ageTokenPastThreshold(signupResponse.body._id);
+        const before = await User.findById(signupResponse.body._id);
+
+        const response = await request(app)
+            .post('/users/refresh')
+            .set('Cookie', refreshCookie);
+
+        expect(response.status).toBe(200);
         expect(cookieValue(cookieHeader(response))).not.toBe(refreshCookie);
+
+        const after = await User.findById(signupResponse.body._id);
+        expect(after.refreshToken).not.toBe(before.refreshToken);
+    });
+
+    it('sets Max-Age from the stored expiry when the token is not rotated', async () => {
+        const signupResponse = await signupAndActivate();
+        const refreshCookie = cookieValue(cookieHeader(signupResponse));
+        // Has lost part of its lifetime, but not enough to be rotation-due, so
+        // the cookie must come back with the remaining life rather than a fresh
+        // full lifetime.
+        await User.findByIdAndUpdate(signupResponse.body._id, {
+            refreshTokenExpiresAt: new Date(
+                Date.now() +
+                    REFRESH_TOKEN_TTL_MS -
+                    REFRESH_ROTATION_THRESHOLD_MS / 2
+            ),
+        });
+
+        const response = await request(app)
+            .post('/users/refresh')
+            .set('Cookie', refreshCookie);
+
+        expect(cookieValue(cookieHeader(response))).toBe(refreshCookie);
+        const maxAge = Number(/Max-Age=(\d+)/i.exec(cookieHeader(response))[1]);
+        expect(maxAge).toBeLessThan(REFRESH_TOKEN_TTL_MS / 1000);
+        expect(maxAge).toBeGreaterThan(
+            (REFRESH_TOKEN_TTL_MS - REFRESH_ROTATION_THRESHOLD_MS) / 1000
+        );
     });
 
     it('rejects a missing cookie', async () => {
@@ -845,6 +938,9 @@ describe('POST /users/refresh', () => {
     it('rejects a rotated-out refresh token on reuse', async () => {
         const signupResponse = await signupAndActivate();
         const firstCookie = cookieValue(cookieHeader(signupResponse));
+        // The first call has to actually rotate for the old value to become
+        // unrecognized, so age the token past the threshold first.
+        await ageTokenPastThreshold(signupResponse.body._id);
 
         await request(app).post('/users/refresh').set('Cookie', firstCookie);
 

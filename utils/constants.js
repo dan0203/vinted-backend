@@ -10,6 +10,13 @@ const OFFER = 'offer';
 const USER = 'user';
 const ACCESS_TOKEN_TTL = '15m';
 const REFRESH_TOKEN_TTL_MS = 30 * 24 * 60 * 60 * 1000;
+// The client calls POST /users/refresh on every page load, so rotating on each
+// call would cost a write and a new cookie value per load, and would make two
+// tabs opened together race for the cookie. A refresh token is instead rotated
+// only once this much of its life has elapsed: far below the 30-day TTL, so the
+// session still slides long before it could lapse, and far above a page-load
+// burst, so concurrent tabs converge on one cookie.
+const REFRESH_ROTATION_THRESHOLD_MS = 24 * 60 * 60 * 1000;
 const MAX_LOGIN_ATTEMPTS = 5;
 const ACCOUNT_LOCK_MS = 15 * 60 * 1000;
 const CONFIRMATION_TOKEN_TTL_MS = 24 * 60 * 60 * 1000;
@@ -28,6 +35,7 @@ module.exports = {
     USER,
     ACCESS_TOKEN_TTL,
     REFRESH_TOKEN_TTL_MS,
+    REFRESH_ROTATION_THRESHOLD_MS,
     MAX_LOGIN_ATTEMPTS,
     ACCOUNT_LOCK_MS,
     CONFIRMATION_TOKEN_TTL_MS,

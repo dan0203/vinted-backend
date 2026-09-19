@@ -1,5 +1,4 @@
 const userService = require('../services/user.service');
-const { REFRESH_TOKEN_TTL_MS } = require('../utils/constants');
 
 const REFRESH_COOKIE_NAME = 'refreshToken';
 
@@ -13,10 +12,14 @@ const refreshCookieOptions = () => ({
     path: '/users',
 });
 
-const setRefreshCookie = (res, refreshToken) => {
+// maxAge tracks the stored expiry instead of a full TTL: refresh() can hand
+// back a token it chose not to rotate, and re-arming the cookie for another
+// full lifetime would let it outlive the server record by up to the rotation
+// threshold.
+const setRefreshCookie = (res, refreshToken, refreshTokenExpiresAt) => {
     res.cookie(REFRESH_COOKIE_NAME, refreshToken, {
         ...refreshCookieOptions(),
-        maxAge: REFRESH_TOKEN_TTL_MS,
+        maxAge: refreshTokenExpiresAt.getTime() - Date.now(),
     });
 };
 
@@ -31,7 +34,11 @@ const toAuthResponse = ({
 const signup = async (req, res, next) => {
     try {
         const newUser = await userService.signup(req.body);
-        setRefreshCookie(res, newUser.refreshToken);
+        setRefreshCookie(
+            res,
+            newUser.refreshToken,
+            newUser.refreshTokenExpiresAt
+        );
 
         return res.status(201).json(toAuthResponse(newUser));
     } catch (error) {
@@ -42,7 +49,7 @@ const signup = async (req, res, next) => {
 const login = async (req, res, next) => {
     try {
         const user = await userService.login(req.body);
-        setRefreshCookie(res, user.refreshToken);
+        setRefreshCookie(res, user.refreshToken, user.refreshTokenExpiresAt);
 
         return res.status(200).json(toAuthResponse(user));
     } catch (error) {
@@ -53,7 +60,11 @@ const login = async (req, res, next) => {
 const refresh = async (req, res, next) => {
     try {
         const result = await userService.refresh({ cookies: req.cookies });
-        setRefreshCookie(res, result.refreshToken);
+        setRefreshCookie(
+            res,
+            result.refreshToken,
+            result.refreshTokenExpiresAt
+        );
 
         return res.status(200).json(toAuthResponse(result));
     } catch (error) {

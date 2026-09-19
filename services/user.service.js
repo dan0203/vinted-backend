@@ -29,6 +29,7 @@ const {
     MAX_FAVORITES,
     ACCESS_TOKEN_TTL,
     REFRESH_TOKEN_TTL_MS,
+    REFRESH_ROTATION_THRESHOLD_MS,
     MAX_LOGIN_ATTEMPTS,
     ACCOUNT_LOCK_MS,
     CONFIRMATION_TOKEN_TTL_MS,
@@ -71,6 +72,12 @@ function issueConfirmationToken(user) {
     );
 }
 
+function issueAccessToken(user) {
+    return jwt.sign({ sub: String(user._id) }, process.env.JWT_SECRET, {
+        expiresIn: ACCESS_TOKEN_TTL,
+    });
+}
+
 // Mints a short-lived JWT access token and a rotating refresh token, storing
 // the refresh token on the user document (caller still has to save() it) and
 // returning the access token. One active refresh token per user at a time,
@@ -79,9 +86,7 @@ function issueSessionTokens(user) {
     user.refreshToken = uid2(16);
     user.refreshTokenExpiresAt = new Date(Date.now() + REFRESH_TOKEN_TTL_MS);
 
-    return jwt.sign({ sub: String(user._id) }, process.env.JWT_SECRET, {
-        expiresIn: ACCESS_TOKEN_TTL,
-    });
+    return issueAccessToken(user);
 }
 
 // username/newsletter only: email and password aren't modified through
@@ -229,10 +234,15 @@ const login = async (data) => {
     };
 };
 
-// Rotates the refresh token on every use: the presented value is replaced
-// immediately, so presenting it again afterward is indistinguishable from
-// any other unrecognized refresh token (401), which is this codebase's
-// existing single-active-session model, not a per-device session list.
+// Rotates the refresh token only once it has aged past
+// REFRESH_ROTATION_THRESHOLD_MS; within that window the presented value is
+// handed straight back. The client refreshes on every page load, so rotating
+// every time would make two tabs opened together race and leave the loser
+// holding a cookie the server no longer accepts. A token that really was
+// rotated out stays indistinguishable from any other unrecognized value (401).
+// The cost is that replaying a token inside the window succeeds rather than
+// being caught; logout and a password reset still cut the session immediately.
+// Single active refresh token per user, not a per-device session list.
 const refresh = async (data) => {
     const token = data.cookies?.refreshToken;
     if (!token) {
@@ -247,8 +257,17 @@ const refresh = async (data) => {
         throwError('Unauthorized', 401);
     }
 
-    const accessToken = issueSessionTokens(user);
-    await user.save();
+    const rotationDue =
+        user.refreshTokenExpiresAt.getTime() - Date.now() <=
+        REFRESH_TOKEN_TTL_MS - REFRESH_ROTATION_THRESHOLD_MS;
+
+    let accessToken;
+    if (rotationDue) {
+        accessToken = issueSessionTokens(user);
+        await user.save();
+    } else {
+        accessToken = issueAccessToken(user);
+    }
 
     return {
         accessToken,

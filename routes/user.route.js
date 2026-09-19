@@ -111,11 +111,11 @@ router.post('/login', authLimiter, userController.login);
  * /users/refresh:
  *   post:
  *     summary: Get a new access token from the refresh cookie
- *     description: Reads the `refreshToken` httpOnly cookie set by signup/login/refresh, rotates it, and issues a new short-lived access token. There is no request body - the refresh token travels only as a cookie, never in JSON.
+ *     description: Reads the `refreshToken` httpOnly cookie set by signup/login/refresh and issues a new short-lived access token. The refresh token itself is rotated only once it has aged past the rotation threshold, so a call made soon after the previous one gets the same cookie value back. There is no request body - the refresh token travels only as a cookie, never in JSON.
  *     tags: [Users]
  *     responses:
  *       200:
- *         description: New access token issued. Also rotates the `refreshToken` cookie.
+ *         description: New access token issued. The `refreshToken` cookie is re-sent, with a new value only when the presented one had aged past the rotation threshold.
  *         content:
  *           application/json:
  *             schema:
