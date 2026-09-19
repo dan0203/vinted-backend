@@ -62,6 +62,10 @@ const getAllQuerySchema = Joi.object({
     priceMax: Joi.number().min(MIN_PRICEMAX),
     page: Joi.number().integer().min(MIN_PAGE),
     sort: Joi.string().valid(...FIELD_SORT_OPTIONS),
+    // Public on purpose: a seller's listings are already public through their
+    // profile, and reusing this route keeps pagination/sort/filters in one
+    // place instead of a second listing endpoint.
+    owner: joiObjectId(),
 });
 
 // Validates `value` against `schema` and returns the validated version (with
@@ -380,6 +384,12 @@ const getAll = async (data) => {
     // Sold offers never appear in the public listing (locked contract, see
     // project-overview.md): no query param currently overrides this.
     const filters = { status: { $ne: 'sold' } };
+
+    // owner filter: no existence check on the id, an unknown owner simply
+    // returns an empty page like any other filter that matches nothing.
+    if (query.owner) {
+        filters.owner = query.owner;
+    }
 
     // title filter
     if (query.title) {

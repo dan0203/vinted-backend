@@ -43,6 +43,9 @@ offerSchema.index({ price: 1 });
 // Speeds up GET /offers, which always filters out sold offers
 offerSchema.index({ status: 1 });
 
+// Speeds up GET /offers?owner=<id>, which lists one seller's offers
+offerSchema.index({ owner: 1 });
+
 const Offer = mongoose.model('Offer', offerSchema);
 
 module.exports = Offer;

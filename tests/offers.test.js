@@ -377,6 +377,113 @@ describe('GET /offers', () => {
         expect(response.body.offers).toHaveLength(0);
     });
 
+    it('filters by owner', async () => {
+        const otherSignup = await request(app).post('/users/signup').send({
+            email: 'other-seller@example.com',
+            password: 'secret123',
+            username: 'other',
+        });
+        await activateUser('other-seller@example.com');
+        await attachPicture(
+            request(app)
+                .post('/offers/publish')
+                .set('Authorization', `Bearer ${otherSignup.body.accessToken}`)
+                .field('title', 'Other jacket')
+                .field('description', 'Good condition')
+                .field('price', '30')
+                .field('brand', "Levi's")
+                .field('size', 'M')
+                .field('color', 'Blue')
+                .field('condition', 'Good')
+                .field('city', 'Paris')
+        );
+
+        const response = await request(app).get(
+            `/offers?owner=${otherSignup.body._id}`
+        );
+
+        expect(response.status).toBe(200);
+        expect(response.body.count).toBe(1);
+        expect(response.body.offers[0].name).toBe('Other jacket');
+        expect(response.body.offers[0].owner._id).toBe(otherSignup.body._id);
+    });
+
+    it('combines the owner filter with the other filters', async () => {
+        // Both sellers get an offer above the price floor, so a listing that
+        // ignored the owner filter would return two instead of one. The
+        // fixture offer (25) stays below it, so the price filter is load
+        // bearing too.
+        const otherSignup = await request(app).post('/users/signup').send({
+            email: 'rich-seller@example.com',
+            password: 'secret123',
+            username: 'rich',
+        });
+        await activateUser('rich-seller@example.com');
+        const publishAt = (accessToken, title, price) =>
+            attachPicture(
+                request(app)
+                    .post('/offers/publish')
+                    .set('Authorization', `Bearer ${accessToken}`)
+                    .field('title', title)
+                    .field('description', 'Good condition')
+                    .field('price', price)
+                    .field('brand', "Levi's")
+                    .field('size', 'M')
+                    .field('color', 'Blue')
+                    .field('condition', 'Good')
+                    .field('city', 'Paris')
+            );
+        await publishAt(token, 'Mine expensive', '150');
+        await publishAt(
+            otherSignup.body.accessToken,
+            'Theirs expensive',
+            '160'
+        );
+
+        const listResponse = await request(app).get('/offers');
+        const ownerId = listResponse.body.offers[0].owner._id;
+
+        const response = await request(app).get(
+            `/offers?owner=${ownerId}&priceMin=100`
+        );
+
+        expect(response.status).toBe(200);
+        expect(response.body.count).toBe(1);
+        expect(response.body.offers[0].name).toBe('Mine expensive');
+        expect(response.body.offers[0].owner._id).toBe(ownerId);
+    });
+
+    // No auth involved: the owner filter is public, it only surfaces what
+    // GET /offers already exposes.
+    it('returns an empty page for an unknown but well-formed owner', async () => {
+        const response = await request(app).get(
+            '/offers?owner=507f1f77bcf86cd799439011'
+        );
+
+        expect(response.status).toBe(200);
+        expect(response.body.count).toBe(0);
+        expect(response.body.offers).toHaveLength(0);
+    });
+
+    it('rejects a malformed owner id', async () => {
+        const response = await request(app).get('/offers?owner=not-an-id');
+
+        expect(response.status).toBe(400);
+    });
+
+    it('excludes sold offers from an owner-filtered listing too', async () => {
+        const listResponse = await request(app).get('/offers');
+        const offer = listResponse.body.offers[0];
+        await Offer.findByIdAndUpdate(offer._id, { status: 'sold' });
+
+        const response = await request(app).get(
+            `/offers?owner=${offer.owner._id}`
+        );
+
+        expect(response.status).toBe(200);
+        expect(response.body.count).toBe(0);
+    });
+
     it('excludes sold offers by default, but still returns them by id', async () => {
         const listResponse = await request(app).get('/offers');
         const offerId = listResponse.body.offers[0]._id;

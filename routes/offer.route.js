@@ -59,7 +59,7 @@ router.post('/publish', isAuthenticated, upload, offerController.publish);
  * /offers:
  *   get:
  *     summary: List offers
- *     description: Sold offers are excluded by default.
+ *     description: Sold offers are excluded, including when filtering by owner.
  *     tags: [Offers]
  *     parameters:
  *       - in: query
@@ -75,6 +75,10 @@ router.post('/publish', isAuthenticated, upload, offerController.publish);
  *       - in: query
  *         name: sort
  *         schema: { type: string, enum: [price-asc, price-desc], default: price-asc }
+ *       - in: query
+ *         name: owner
+ *         schema: { type: string }
+ *         description: Only offers published by this user id. Public, and combinable with the other filters.
  *       - in: query
  *         name: page
  *         schema: { type: integer, minimum: 1, default: 1 }
