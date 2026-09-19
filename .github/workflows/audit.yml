@@ -1,0 +1,24 @@
+name: Audit
+
+# The audit job in ci.yml is advisory: it runs on every pull request but cannot
+# fail one, because advisories are published against dependencies we never chose.
+# This is where the same check is allowed to fail, on a schedule rather than on
+# someone else's commit.
+on:
+    schedule:
+        - cron: '0 6 * * 1'
+    workflow_dispatch:
+
+permissions:
+    contents: read
+
+jobs:
+    audit:
+        runs-on: ubuntu-latest
+        steps:
+            - uses: actions/checkout@v4
+            - uses: actions/setup-node@v4
+              with:
+                  node-version: 20
+            - run: npm ci
+            - run: npm run security
